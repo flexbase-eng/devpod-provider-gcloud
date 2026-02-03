@@ -2,6 +2,71 @@
 
 [![Join us on Slack!](docs/static/media/slack.svg)](https://slack.loft.sh/) [![Open in DevPod!](https://devpod.sh/assets/open-in-devpod.svg)](https://devpod.sh/open#https://github.com/loft-sh/devpod-provider-gcloud)
 
+## Building and Creating a Release
+
+### 1. Build Binaries for All Platforms
+
+```sh
+GOOS=linux GOARCH=amd64 go build -o devpod-provider-gcloud-linux-amd64
+GOOS=darwin GOARCH=amd64 go build -o devpod-provider-gcloud-darwin-amd64
+GOOS=darwin GOARCH=arm64 go build -o devpod-provider-gcloud-darwin-arm64
+```
+
+### 2. Generate Checksums
+
+```sh
+shasum -a 256 devpod-provider-gcloud-* > checksums.txt
+cat checksums.txt
+```
+
+### 3. Create provider.yaml for Release
+
+Copy `hack/provider/provider.yaml` and replace placeholders:
+
+```sh
+VERSION="v0.1.0"
+REPO="flexbase-eng/devpod-provider-gcloud"
+
+# Get checksums
+CHECKSUM_LINUX_AMD64=$(shasum -a 256 devpod-provider-gcloud-linux-amd64 | cut -d' ' -f1)
+CHECKSUM_DARWIN_AMD64=$(shasum -a 256 devpod-provider-gcloud-darwin-amd64 | cut -d' ' -f1)
+CHECKSUM_DARWIN_ARM64=$(shasum -a 256 devpod-provider-gcloud-darwin-arm64 | cut -d' ' -f1)
+
+# Create release provider.yaml
+sed -e "s|##VERSION##|$VERSION|g" \
+    -e "s|##CHECKSUM_LINUX_AMD64##|$CHECKSUM_LINUX_AMD64|g" \
+    -e "s|##CHECKSUM_DARWIN_AMD64##|$CHECKSUM_DARWIN_AMD64|g" \
+    -e "s|##CHECKSUM_DARWIN_ARM64##|$CHECKSUM_DARWIN_ARM64|g" \
+    -e "s|loft-sh/devpod-provider-gcloud|$REPO|g" \
+    hack/provider/provider.yaml > provider.yaml
+```
+
+### 4. Create GitHub Release
+
+```sh
+# Tag the release
+git tag $VERSION
+git push origin $VERSION
+
+# Create release with gh CLI
+gh release create $VERSION \
+  -R $REPO \
+  --title "$VERSION" \
+  --notes "Release notes here" \
+  devpod-provider-gcloud-linux-amd64 \
+  devpod-provider-gcloud-darwin-amd64 \
+  devpod-provider-gcloud-darwin-arm64 \
+  provider.yaml
+```
+
+### 5. Use the Forked Provider
+
+```sh
+devpod provider add github.com/flexbase-eng/devpod-provider-gcloud \
+  -o PROJECT=<project-id> \
+  -o ZONE=<zone>
+```
+
 ## Getting started
 
 The provider is available for auto-installation using:
