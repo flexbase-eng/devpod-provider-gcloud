@@ -83,11 +83,11 @@ func rawStop(ctx context.Context, options *options.Options) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		out, err := io.ReadAll(resp.Body)
-		if err == nil {
-			return errors.Wrapf(err, "Error stopping vm: %s", string(out))
+		if err != nil {
+			return errors.Wrapf(err, "error stopping vm: %s", resp.Status)
 		}
 
-		return err
+		return fmt.Errorf("error stopping vm: %s: %s", resp.Status, string(out))
 	}
 
 	return nil
