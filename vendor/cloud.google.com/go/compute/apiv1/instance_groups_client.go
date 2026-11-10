@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -29,13 +29,11 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -44,21 +42,25 @@ var newInstanceGroupsClientHook clientHook
 
 // InstanceGroupsCallOptions contains the retry settings for each method of InstanceGroupsClient.
 type InstanceGroupsCallOptions struct {
-	AddInstances    []gax.CallOption
-	AggregatedList  []gax.CallOption
-	Delete          []gax.CallOption
-	Get             []gax.CallOption
-	Insert          []gax.CallOption
-	List            []gax.CallOption
-	ListInstances   []gax.CallOption
-	RemoveInstances []gax.CallOption
-	SetNamedPorts   []gax.CallOption
+	AddInstances       []gax.CallOption
+	AggregatedList     []gax.CallOption
+	Delete             []gax.CallOption
+	Get                []gax.CallOption
+	Insert             []gax.CallOption
+	List               []gax.CallOption
+	ListInstances      []gax.CallOption
+	RemoveInstances    []gax.CallOption
+	SetNamedPorts      []gax.CallOption
+	TestIamPermissions []gax.CallOption
 }
 
 func defaultInstanceGroupsRESTCallOptions() *InstanceGroupsCallOptions {
 	return &InstanceGroupsCallOptions{
-		AddInstances: []gax.CallOption{},
+		AddInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		AggregatedList: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -69,8 +71,11 @@ func defaultInstanceGroupsRESTCallOptions() *InstanceGroupsCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Delete: []gax.CallOption{},
+		Delete: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -81,8 +86,11 @@ func defaultInstanceGroupsRESTCallOptions() *InstanceGroupsCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Insert: []gax.CallOption{},
+		Insert: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		List: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -93,9 +101,18 @@ func defaultInstanceGroupsRESTCallOptions() *InstanceGroupsCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		ListInstances:   []gax.CallOption{},
-		RemoveInstances: []gax.CallOption{},
-		SetNamedPorts:   []gax.CallOption{},
+		ListInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		RemoveInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetNamedPorts: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		TestIamPermissions: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 	}
 }
 
@@ -113,6 +130,7 @@ type internalInstanceGroupsClient interface {
 	ListInstances(context.Context, *computepb.ListInstancesInstanceGroupsRequest, ...gax.CallOption) *InstanceWithNamedPortsIterator
 	RemoveInstances(context.Context, *computepb.RemoveInstancesInstanceGroupRequest, ...gax.CallOption) (*Operation, error)
 	SetNamedPorts(context.Context, *computepb.SetNamedPortsInstanceGroupRequest, ...gax.CallOption) (*Operation, error)
+	TestIamPermissions(context.Context, *computepb.TestIamPermissionsInstanceGroupRequest, ...gax.CallOption) (*computepb.TestPermissionsResponse, error)
 }
 
 // InstanceGroupsClient is a client for interacting with Google Compute Engine API.
@@ -150,42 +168,71 @@ func (c *InstanceGroupsClient) Connection() *grpc.ClientConn {
 	return c.internalClient.Connection()
 }
 
-// AddInstances adds a list of instances to the specified instance group. All of the instances in the instance group must be in the same network/subnetwork. Read Adding instances for more information.
+// AddInstances adds a list of instances to the specified instance group.  All of the
+// instances in the instance group must be in the same network/subnetwork.
+// Read
+// Adding instances for more information.
 func (c *InstanceGroupsClient) AddInstances(ctx context.Context, req *computepb.AddInstancesInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.AddInstances(ctx, req, opts...)
 }
 
 // AggregatedList retrieves the list of instance groups and sorts them by zone.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *InstanceGroupsClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListInstanceGroupsRequest, opts ...gax.CallOption) *InstanceGroupsScopedListPairIterator {
 	return c.internalClient.AggregatedList(ctx, req, opts...)
 }
 
-// Delete deletes the specified instance group. The instances in the group are not deleted. Note that instance group must not belong to a backend service. Read Deleting an instance group for more information.
+// Delete deletes the specified instance group. The instances in the group are not
+// deleted. Note that instance group must not belong to a backend service.
+// Read
+// Deleting an instance group for more information.
 func (c *InstanceGroupsClient) Delete(ctx context.Context, req *computepb.DeleteInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Delete(ctx, req, opts...)
 }
 
-// Get returns the specified zonal instance group. Get a list of available zonal instance groups by making a list() request. For managed instance groups, use the instanceGroupManagers or regionInstanceGroupManagers methods instead.
+// Get returns the specified zonal instance group. Get a list of available zonal
+// instance groups by making a list() request.
+//
+// For managed instance groups, use theinstanceGroupManagers
+// or regionInstanceGroupManagers
+// methods instead.
 func (c *InstanceGroupsClient) Get(ctx context.Context, req *computepb.GetInstanceGroupRequest, opts ...gax.CallOption) (*computepb.InstanceGroup, error) {
 	return c.internalClient.Get(ctx, req, opts...)
 }
 
-// Insert creates an instance group in the specified project using the parameters that are included in the request.
+// Insert creates an instance group in the specified project using the
+// parameters that are included in the request.
 func (c *InstanceGroupsClient) Insert(ctx context.Context, req *computepb.InsertInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Insert(ctx, req, opts...)
 }
 
-// List retrieves the list of zonal instance group resources contained within the specified zone. For managed instance groups, use the instanceGroupManagers or regionInstanceGroupManagers methods instead.
+// List retrieves the list of zonal instance group resources contained within the
+// specified zone.
+//
+// For managed instance groups, use theinstanceGroupManagers
+// or regionInstanceGroupManagers
+// methods instead.
 func (c *InstanceGroupsClient) List(ctx context.Context, req *computepb.ListInstanceGroupsRequest, opts ...gax.CallOption) *InstanceGroupIterator {
 	return c.internalClient.List(ctx, req, opts...)
 }
 
-// ListInstances lists the instances in the specified instance group. The orderBy query parameter is not supported. The filter query parameter is supported, but only for expressions that use eq (equal) or ne (not equal) operators.
+// ListInstances lists the instances in the specified instance group.
+// The orderBy query parameter is not supported.
+// The filter query parameter is supported, but only for
+// expressions that use eq (equal) or ne (not equal) operators.
 func (c *InstanceGroupsClient) ListInstances(ctx context.Context, req *computepb.ListInstancesInstanceGroupsRequest, opts ...gax.CallOption) *InstanceWithNamedPortsIterator {
 	return c.internalClient.ListInstances(ctx, req, opts...)
 }
 
-// RemoveInstances removes one or more instances from the specified instance group, but does not delete those instances. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration before the VM instance is removed or deleted.
+// RemoveInstances removes one or more instances from the specified instance group, but does
+// not delete those instances.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration before the VM instance is removed or deleted.
 func (c *InstanceGroupsClient) RemoveInstances(ctx context.Context, req *computepb.RemoveInstancesInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.RemoveInstances(ctx, req, opts...)
 }
@@ -193,6 +240,11 @@ func (c *InstanceGroupsClient) RemoveInstances(ctx context.Context, req *compute
 // SetNamedPorts sets the named ports for the specified instance group.
 func (c *InstanceGroupsClient) SetNamedPorts(ctx context.Context, req *computepb.SetNamedPortsInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetNamedPorts(ctx, req, opts...)
+}
+
+// TestIamPermissions returns permissions that a caller has on the specified resource.
+func (c *InstanceGroupsClient) TestIamPermissions(ctx context.Context, req *computepb.TestIamPermissionsInstanceGroupRequest, opts ...gax.CallOption) (*computepb.TestPermissionsResponse, error) {
+	return c.internalClient.TestIamPermissions(ctx, req, opts...)
 }
 
 // Methods, except Close, may be called concurrently. However, fields must not be modified concurrently with method calls.
@@ -206,11 +258,13 @@ type instanceGroupsRESTClient struct {
 	// operationClient is used to call the operation-specific management service.
 	operationClient *ZoneOperationsClient
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing InstanceGroupsClient
 	CallOptions **InstanceGroupsCallOptions
+
+	logger *slog.Logger
 }
 
 // NewInstanceGroupsRESTClient creates a new instance groups rest client.
@@ -228,6 +282,7 @@ func NewInstanceGroupsRESTClient(ctx context.Context, opts ...option.ClientOptio
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -247,9 +302,12 @@ func NewInstanceGroupsRESTClient(ctx context.Context, opts ...option.ClientOptio
 func defaultInstanceGroupsRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -257,9 +315,11 @@ func defaultInstanceGroupsRESTClientOptions() []option.ClientOption {
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *instanceGroupsRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -280,7 +340,10 @@ func (c *instanceGroupsRESTClient) Connection() *grpc.ClientConn {
 	return nil
 }
 
-// AddInstances adds a list of instances to the specified instance group. All of the instances in the instance group must be in the same network/subnetwork. Read Adding instances for more information.
+// AddInstances adds a list of instances to the specified instance group.  All of the
+// instances in the instance group must be in the same network/subnetwork.
+// Read
+// Adding instances for more information.
 func (c *instanceGroupsRESTClient) AddInstances(ctx context.Context, req *computepb.AddInstancesInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceGroupsAddInstancesRequestResource()
@@ -303,9 +366,11 @@ func (c *instanceGroupsRESTClient) AddInstances(ctx context.Context, req *comput
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AddInstances[0:len((*c.CallOptions).AddInstances):len((*c.CallOptions).AddInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -320,23 +385,13 @@ func (c *instanceGroupsRESTClient) AddInstances(ctx context.Context, req *comput
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AddInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -356,6 +411,9 @@ func (c *instanceGroupsRESTClient) AddInstances(ctx context.Context, req *comput
 }
 
 // AggregatedList retrieves the list of instance groups and sorts them by zone.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *instanceGroupsRESTClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListInstanceGroupsRequest, opts ...gax.CallOption) *InstanceGroupsScopedListPairIterator {
 	it := &InstanceGroupsScopedListPairIterator{}
 	req = proto.Clone(req).(*computepb.AggregatedListInstanceGroupsRequest)
@@ -366,7 +424,7 @@ func (c *instanceGroupsRESTClient) AggregatedList(ctx context.Context, req *comp
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -395,11 +453,15 @@ func (c *instanceGroupsRESTClient) AggregatedList(ctx context.Context, req *comp
 		if req != nil && req.ReturnPartialSuccess != nil {
 			params.Add("returnPartialSuccess", fmt.Sprintf("%v", req.GetReturnPartialSuccess()))
 		}
+		if req != nil && req.ServiceProjectNumber != nil {
+			params.Add("serviceProjectNumber", fmt.Sprintf("%v", req.GetServiceProjectNumber()))
+		}
 
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -410,23 +472,12 @@ func (c *instanceGroupsRESTClient) AggregatedList(ctx context.Context, req *comp
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "AggregatedList")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -461,7 +512,10 @@ func (c *instanceGroupsRESTClient) AggregatedList(ctx context.Context, req *comp
 	return it
 }
 
-// Delete deletes the specified instance group. The instances in the group are not deleted. Note that instance group must not belong to a backend service. Read Deleting an instance group for more information.
+// Delete deletes the specified instance group. The instances in the group are not
+// deleted. Note that instance group must not belong to a backend service.
+// Read
+// Deleting an instance group for more information.
 func (c *instanceGroupsRESTClient) Delete(ctx context.Context, req *computepb.DeleteInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -477,9 +531,11 @@ func (c *instanceGroupsRESTClient) Delete(ctx context.Context, req *computepb.De
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Delete[0:len((*c.CallOptions).Delete):len((*c.CallOptions).Delete)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -494,23 +550,13 @@ func (c *instanceGroupsRESTClient) Delete(ctx context.Context, req *computepb.De
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Delete")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -529,7 +575,12 @@ func (c *instanceGroupsRESTClient) Delete(ctx context.Context, req *computepb.De
 	return op, nil
 }
 
-// Get returns the specified zonal instance group. Get a list of available zonal instance groups by making a list() request. For managed instance groups, use the instanceGroupManagers or regionInstanceGroupManagers methods instead.
+// Get returns the specified zonal instance group. Get a list of available zonal
+// instance groups by making a list() request.
+//
+// For managed instance groups, use theinstanceGroupManagers
+// or regionInstanceGroupManagers
+// methods instead.
 func (c *instanceGroupsRESTClient) Get(ctx context.Context, req *computepb.GetInstanceGroupRequest, opts ...gax.CallOption) (*computepb.InstanceGroup, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -538,9 +589,11 @@ func (c *instanceGroupsRESTClient) Get(ctx context.Context, req *computepb.GetIn
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instanceGroups/%v", req.GetProject(), req.GetZone(), req.GetInstanceGroup())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.InstanceGroup{}
@@ -555,23 +608,13 @@ func (c *instanceGroupsRESTClient) Get(ctx context.Context, req *computepb.GetIn
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -582,7 +625,8 @@ func (c *instanceGroupsRESTClient) Get(ctx context.Context, req *computepb.GetIn
 	return resp, nil
 }
 
-// Insert creates an instance group in the specified project using the parameters that are included in the request.
+// Insert creates an instance group in the specified project using the
+// parameters that are included in the request.
 func (c *instanceGroupsRESTClient) Insert(ctx context.Context, req *computepb.InsertInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceGroupResource()
@@ -605,9 +649,11 @@ func (c *instanceGroupsRESTClient) Insert(ctx context.Context, req *computepb.In
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Insert[0:len((*c.CallOptions).Insert):len((*c.CallOptions).Insert)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -622,23 +668,13 @@ func (c *instanceGroupsRESTClient) Insert(ctx context.Context, req *computepb.In
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Insert")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -657,7 +693,12 @@ func (c *instanceGroupsRESTClient) Insert(ctx context.Context, req *computepb.In
 	return op, nil
 }
 
-// List retrieves the list of zonal instance group resources contained within the specified zone. For managed instance groups, use the instanceGroupManagers or regionInstanceGroupManagers methods instead.
+// List retrieves the list of zonal instance group resources contained within the
+// specified zone.
+//
+// For managed instance groups, use theinstanceGroupManagers
+// or regionInstanceGroupManagers
+// methods instead.
 func (c *instanceGroupsRESTClient) List(ctx context.Context, req *computepb.ListInstanceGroupsRequest, opts ...gax.CallOption) *InstanceGroupIterator {
 	it := &InstanceGroupIterator{}
 	req = proto.Clone(req).(*computepb.ListInstanceGroupsRequest)
@@ -668,7 +709,7 @@ func (c *instanceGroupsRESTClient) List(ctx context.Context, req *computepb.List
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -698,7 +739,8 @@ func (c *instanceGroupsRESTClient) List(ctx context.Context, req *computepb.List
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -709,23 +751,12 @@ func (c *instanceGroupsRESTClient) List(ctx context.Context, req *computepb.List
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "List")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -753,7 +784,10 @@ func (c *instanceGroupsRESTClient) List(ctx context.Context, req *computepb.List
 	return it
 }
 
-// ListInstances lists the instances in the specified instance group. The orderBy query parameter is not supported. The filter query parameter is supported, but only for expressions that use eq (equal) or ne (not equal) operators.
+// ListInstances lists the instances in the specified instance group.
+// The orderBy query parameter is not supported.
+// The filter query parameter is supported, but only for
+// expressions that use eq (equal) or ne (not equal) operators.
 func (c *instanceGroupsRESTClient) ListInstances(ctx context.Context, req *computepb.ListInstancesInstanceGroupsRequest, opts ...gax.CallOption) *InstanceWithNamedPortsIterator {
 	it := &InstanceWithNamedPortsIterator{}
 	req = proto.Clone(req).(*computepb.ListInstancesInstanceGroupsRequest)
@@ -765,7 +799,7 @@ func (c *instanceGroupsRESTClient) ListInstances(ctx context.Context, req *compu
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -800,7 +834,8 @@ func (c *instanceGroupsRESTClient) ListInstances(ctx context.Context, req *compu
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -811,23 +846,12 @@ func (c *instanceGroupsRESTClient) ListInstances(ctx context.Context, req *compu
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "ListInstances")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -855,7 +879,13 @@ func (c *instanceGroupsRESTClient) ListInstances(ctx context.Context, req *compu
 	return it
 }
 
-// RemoveInstances removes one or more instances from the specified instance group, but does not delete those instances. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration before the VM instance is removed or deleted.
+// RemoveInstances removes one or more instances from the specified instance group, but does
+// not delete those instances.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration before the VM instance is removed or deleted.
 func (c *instanceGroupsRESTClient) RemoveInstances(ctx context.Context, req *computepb.RemoveInstancesInstanceGroupRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceGroupsRemoveInstancesRequestResource()
@@ -878,9 +908,11 @@ func (c *instanceGroupsRESTClient) RemoveInstances(ctx context.Context, req *com
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).RemoveInstances[0:len((*c.CallOptions).RemoveInstances):len((*c.CallOptions).RemoveInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -895,23 +927,13 @@ func (c *instanceGroupsRESTClient) RemoveInstances(ctx context.Context, req *com
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "RemoveInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -953,9 +975,11 @@ func (c *instanceGroupsRESTClient) SetNamedPorts(ctx context.Context, req *compu
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance_group", url.QueryEscape(req.GetInstanceGroup()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetNamedPorts[0:len((*c.CallOptions).SetNamedPorts):len((*c.CallOptions).SetNamedPorts)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -970,23 +994,13 @@ func (c *instanceGroupsRESTClient) SetNamedPorts(ctx context.Context, req *compu
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetNamedPorts")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1005,149 +1019,54 @@ func (c *instanceGroupsRESTClient) SetNamedPorts(ctx context.Context, req *compu
 	return op, nil
 }
 
-// InstanceGroupIterator manages a stream of *computepb.InstanceGroup.
-type InstanceGroupIterator struct {
-	items    []*computepb.InstanceGroup
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []*computepb.InstanceGroup, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *InstanceGroupIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *InstanceGroupIterator) Next() (*computepb.InstanceGroup, error) {
-	var item *computepb.InstanceGroup
-	if err := it.nextFunc(); err != nil {
-		return item, err
+// TestIamPermissions returns permissions that a caller has on the specified resource.
+func (c *instanceGroupsRESTClient) TestIamPermissions(ctx context.Context, req *computepb.TestIamPermissionsInstanceGroupRequest, opts ...gax.CallOption) (*computepb.TestPermissionsResponse, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetTestPermissionsRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
 	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
 
-func (it *InstanceGroupIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *InstanceGroupIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
-}
-
-// InstanceGroupsScopedListPair is a holder type for string/*computepb.InstanceGroupsScopedList map entries
-type InstanceGroupsScopedListPair struct {
-	Key   string
-	Value *computepb.InstanceGroupsScopedList
-}
-
-// InstanceGroupsScopedListPairIterator manages a stream of InstanceGroupsScopedListPair.
-type InstanceGroupsScopedListPairIterator struct {
-	items    []InstanceGroupsScopedListPair
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []InstanceGroupsScopedListPair, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *InstanceGroupsScopedListPairIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *InstanceGroupsScopedListPairIterator) Next() (InstanceGroupsScopedListPair, error) {
-	var item InstanceGroupsScopedListPair
-	if err := it.nextFunc(); err != nil {
-		return item, err
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
 	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instanceGroups/%v/testIamPermissions", req.GetProject(), req.GetZone(), req.GetResource())
 
-func (it *InstanceGroupsScopedListPairIterator) bufLen() int {
-	return len(it.items)
-}
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource()))}
 
-func (it *InstanceGroupsScopedListPairIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
-}
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).TestIamPermissions[0:len((*c.CallOptions).TestIamPermissions):len((*c.CallOptions).TestIamPermissions)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.TestPermissionsResponse{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
 
-// InstanceWithNamedPortsIterator manages a stream of *computepb.InstanceWithNamedPorts.
-type InstanceWithNamedPortsIterator struct {
-	items    []*computepb.InstanceWithNamedPorts
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "TestIamPermissions")
+		if err != nil {
+			return err
+		}
 
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
 
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []*computepb.InstanceWithNamedPorts, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *InstanceWithNamedPortsIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *InstanceWithNamedPortsIterator) Next() (*computepb.InstanceWithNamedPorts, error) {
-	var item *computepb.InstanceWithNamedPorts
-	if err := it.nextFunc(); err != nil {
-		return item, err
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
 	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *InstanceWithNamedPortsIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *InstanceWithNamedPortsIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
+	return resp, nil
 }

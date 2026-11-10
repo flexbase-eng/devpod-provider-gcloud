@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -29,13 +29,11 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -45,12 +43,14 @@ var newInstancesClientHook clientHook
 // InstancesCallOptions contains the retry settings for each method of InstancesClient.
 type InstancesCallOptions struct {
 	AddAccessConfig                    []gax.CallOption
+	AddNetworkInterface                []gax.CallOption
 	AddResourcePolicies                []gax.CallOption
 	AggregatedList                     []gax.CallOption
 	AttachDisk                         []gax.CallOption
 	BulkInsert                         []gax.CallOption
 	Delete                             []gax.CallOption
 	DeleteAccessConfig                 []gax.CallOption
+	DeleteNetworkInterface             []gax.CallOption
 	DetachDisk                         []gax.CallOption
 	Get                                []gax.CallOption
 	GetEffectiveFirewalls              []gax.CallOption
@@ -62,7 +62,9 @@ type InstancesCallOptions struct {
 	Insert                             []gax.CallOption
 	List                               []gax.CallOption
 	ListReferrers                      []gax.CallOption
+	PerformMaintenance                 []gax.CallOption
 	RemoveResourcePolicies             []gax.CallOption
+	ReportHostAsFaulty                 []gax.CallOption
 	Reset                              []gax.CallOption
 	Resume                             []gax.CallOption
 	SendDiagnosticInterrupt            []gax.CallOption
@@ -76,6 +78,7 @@ type InstancesCallOptions struct {
 	SetMinCpuPlatform                  []gax.CallOption
 	SetName                            []gax.CallOption
 	SetScheduling                      []gax.CallOption
+	SetSecurityPolicy                  []gax.CallOption
 	SetServiceAccount                  []gax.CallOption
 	SetShieldedInstanceIntegrityPolicy []gax.CallOption
 	SetTags                            []gax.CallOption
@@ -94,9 +97,17 @@ type InstancesCallOptions struct {
 
 func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 	return &InstancesCallOptions{
-		AddAccessConfig:     []gax.CallOption{},
-		AddResourcePolicies: []gax.CallOption{},
+		AddAccessConfig: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		AddNetworkInterface: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		AddResourcePolicies: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		AggregatedList: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -107,12 +118,26 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		AttachDisk:         []gax.CallOption{},
-		BulkInsert:         []gax.CallOption{},
-		Delete:             []gax.CallOption{},
-		DeleteAccessConfig: []gax.CallOption{},
-		DetachDisk:         []gax.CallOption{},
+		AttachDisk: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		BulkInsert: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Delete: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		DeleteAccessConfig: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		DeleteNetworkInterface: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		DetachDisk: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -124,6 +149,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetEffectiveFirewalls: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -135,6 +161,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetGuestAttributes: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -146,6 +173,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetIamPolicy: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -157,6 +185,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetScreenshot: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -168,6 +197,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetSerialPortOutput: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -179,6 +209,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		GetShieldedInstanceIdentity: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -189,8 +220,11 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Insert: []gax.CallOption{},
+		Insert: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		List: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -202,6 +236,7 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 			}),
 		},
 		ListReferrers: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -212,34 +247,99 @@ func defaultInstancesRESTCallOptions() *InstancesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		RemoveResourcePolicies:             []gax.CallOption{},
-		Reset:                              []gax.CallOption{},
-		Resume:                             []gax.CallOption{},
-		SendDiagnosticInterrupt:            []gax.CallOption{},
-		SetDeletionProtection:              []gax.CallOption{},
-		SetDiskAutoDelete:                  []gax.CallOption{},
-		SetIamPolicy:                       []gax.CallOption{},
-		SetLabels:                          []gax.CallOption{},
-		SetMachineResources:                []gax.CallOption{},
-		SetMachineType:                     []gax.CallOption{},
-		SetMetadata:                        []gax.CallOption{},
-		SetMinCpuPlatform:                  []gax.CallOption{},
-		SetName:                            []gax.CallOption{},
-		SetScheduling:                      []gax.CallOption{},
-		SetServiceAccount:                  []gax.CallOption{},
-		SetShieldedInstanceIntegrityPolicy: []gax.CallOption{},
-		SetTags:                            []gax.CallOption{},
-		SimulateMaintenanceEvent:           []gax.CallOption{},
-		Start:                              []gax.CallOption{},
-		StartWithEncryptionKey:             []gax.CallOption{},
-		Stop:                               []gax.CallOption{},
-		Suspend:                            []gax.CallOption{},
-		TestIamPermissions:                 []gax.CallOption{},
-		Update:                             []gax.CallOption{},
-		UpdateAccessConfig:                 []gax.CallOption{},
-		UpdateDisplayDevice:                []gax.CallOption{},
-		UpdateNetworkInterface:             []gax.CallOption{},
-		UpdateShieldedInstanceConfig:       []gax.CallOption{},
+		PerformMaintenance: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		RemoveResourcePolicies: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		ReportHostAsFaulty: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Reset: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Resume: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SendDiagnosticInterrupt: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetDeletionProtection: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetDiskAutoDelete: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetIamPolicy: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetLabels: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetMachineResources: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetMachineType: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetMetadata: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetMinCpuPlatform: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetName: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetScheduling: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetSecurityPolicy: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetServiceAccount: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetShieldedInstanceIntegrityPolicy: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetTags: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SimulateMaintenanceEvent: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Start: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		StartWithEncryptionKey: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Stop: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Suspend: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		TestIamPermissions: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Update: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		UpdateAccessConfig: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		UpdateDisplayDevice: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		UpdateNetworkInterface: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		UpdateShieldedInstanceConfig: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 	}
 }
 
@@ -249,12 +349,14 @@ type internalInstancesClient interface {
 	setGoogleClientInfo(...string)
 	Connection() *grpc.ClientConn
 	AddAccessConfig(context.Context, *computepb.AddAccessConfigInstanceRequest, ...gax.CallOption) (*Operation, error)
+	AddNetworkInterface(context.Context, *computepb.AddNetworkInterfaceInstanceRequest, ...gax.CallOption) (*Operation, error)
 	AddResourcePolicies(context.Context, *computepb.AddResourcePoliciesInstanceRequest, ...gax.CallOption) (*Operation, error)
 	AggregatedList(context.Context, *computepb.AggregatedListInstancesRequest, ...gax.CallOption) *InstancesScopedListPairIterator
 	AttachDisk(context.Context, *computepb.AttachDiskInstanceRequest, ...gax.CallOption) (*Operation, error)
 	BulkInsert(context.Context, *computepb.BulkInsertInstanceRequest, ...gax.CallOption) (*Operation, error)
 	Delete(context.Context, *computepb.DeleteInstanceRequest, ...gax.CallOption) (*Operation, error)
 	DeleteAccessConfig(context.Context, *computepb.DeleteAccessConfigInstanceRequest, ...gax.CallOption) (*Operation, error)
+	DeleteNetworkInterface(context.Context, *computepb.DeleteNetworkInterfaceInstanceRequest, ...gax.CallOption) (*Operation, error)
 	DetachDisk(context.Context, *computepb.DetachDiskInstanceRequest, ...gax.CallOption) (*Operation, error)
 	Get(context.Context, *computepb.GetInstanceRequest, ...gax.CallOption) (*computepb.Instance, error)
 	GetEffectiveFirewalls(context.Context, *computepb.GetEffectiveFirewallsInstanceRequest, ...gax.CallOption) (*computepb.InstancesGetEffectiveFirewallsResponse, error)
@@ -266,7 +368,9 @@ type internalInstancesClient interface {
 	Insert(context.Context, *computepb.InsertInstanceRequest, ...gax.CallOption) (*Operation, error)
 	List(context.Context, *computepb.ListInstancesRequest, ...gax.CallOption) *InstanceIterator
 	ListReferrers(context.Context, *computepb.ListReferrersInstancesRequest, ...gax.CallOption) *ReferenceIterator
+	PerformMaintenance(context.Context, *computepb.PerformMaintenanceInstanceRequest, ...gax.CallOption) (*Operation, error)
 	RemoveResourcePolicies(context.Context, *computepb.RemoveResourcePoliciesInstanceRequest, ...gax.CallOption) (*Operation, error)
+	ReportHostAsFaulty(context.Context, *computepb.ReportHostAsFaultyInstanceRequest, ...gax.CallOption) (*Operation, error)
 	Reset(context.Context, *computepb.ResetInstanceRequest, ...gax.CallOption) (*Operation, error)
 	Resume(context.Context, *computepb.ResumeInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SendDiagnosticInterrupt(context.Context, *computepb.SendDiagnosticInterruptInstanceRequest, ...gax.CallOption) (*computepb.SendDiagnosticInterruptInstanceResponse, error)
@@ -280,6 +384,7 @@ type internalInstancesClient interface {
 	SetMinCpuPlatform(context.Context, *computepb.SetMinCpuPlatformInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SetName(context.Context, *computepb.SetNameInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SetScheduling(context.Context, *computepb.SetSchedulingInstanceRequest, ...gax.CallOption) (*Operation, error)
+	SetSecurityPolicy(context.Context, *computepb.SetSecurityPolicyInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SetServiceAccount(context.Context, *computepb.SetServiceAccountInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SetShieldedInstanceIntegrityPolicy(context.Context, *computepb.SetShieldedInstanceIntegrityPolicyInstanceRequest, ...gax.CallOption) (*Operation, error)
 	SetTags(context.Context, *computepb.SetTagsInstanceRequest, ...gax.CallOption) (*Operation, error)
@@ -336,27 +441,47 @@ func (c *InstancesClient) AddAccessConfig(ctx context.Context, req *computepb.Ad
 	return c.internalClient.AddAccessConfig(ctx, req, opts...)
 }
 
-// AddResourcePolicies adds existing resource policies to an instance. You can only add one policy right now which will be applied to this instance for scheduling live migrations.
+// AddNetworkInterface adds one dynamic network interface to an active instance.
+func (c *InstancesClient) AddNetworkInterface(ctx context.Context, req *computepb.AddNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.AddNetworkInterface(ctx, req, opts...)
+}
+
+// AddResourcePolicies adds existing resource policies to an instance. You can only add one
+// policy right now which will be applied to this instance for scheduling live
+// migrations.
 func (c *InstancesClient) AddResourcePolicies(ctx context.Context, req *computepb.AddResourcePoliciesInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.AddResourcePolicies(ctx, req, opts...)
 }
 
-// AggregatedList retrieves an aggregated list of all of the instances in your project across all regions and zones. The performance of this method degrades when a filter is specified on a project that has a very large number of instances.
+// AggregatedList retrieves an aggregated list of all of the instances in your project
+// across all regions and zones.
+//
+// The performance of this method degrades when a filter is specified on a
+// project that has a very large number of instances.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *InstancesClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListInstancesRequest, opts ...gax.CallOption) *InstancesScopedListPairIterator {
 	return c.internalClient.AggregatedList(ctx, req, opts...)
 }
 
-// AttachDisk attaches an existing Disk resource to an instance. You must first create the disk before you can attach it. It is not possible to create and attach a disk at the same time. For more information, read Adding a persistent disk to your instance.
+// AttachDisk attaches an existing Disk resource to an instance. You must first
+// create the disk before you can attach it. It is not possible to create
+// and attach a disk at the same time. For more information, readAdding a
+// persistent disk to your instance.
 func (c *InstancesClient) AttachDisk(ctx context.Context, req *computepb.AttachDiskInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.AttachDisk(ctx, req, opts...)
 }
 
-// BulkInsert creates multiple instances. Count specifies the number of instances to create. For more information, see About bulk creation of VMs.
+// BulkInsert creates multiple instances. Count specifies the number of instances to
+// create. For more information, seeAbout bulk
+// creation of VMs.
 func (c *InstancesClient) BulkInsert(ctx context.Context, req *computepb.BulkInsertInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.BulkInsert(ctx, req, opts...)
 }
 
-// Delete deletes the specified Instance resource. For more information, see Deleting an instance.
+// Delete deletes the specified Instance resource. For more information, seeDeleting
+// an instance.
 func (c *InstancesClient) Delete(ctx context.Context, req *computepb.DeleteInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Delete(ctx, req, opts...)
 }
@@ -364,6 +489,17 @@ func (c *InstancesClient) Delete(ctx context.Context, req *computepb.DeleteInsta
 // DeleteAccessConfig deletes an access config from an instance’s network interface.
 func (c *InstancesClient) DeleteAccessConfig(ctx context.Context, req *computepb.DeleteAccessConfigInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.DeleteAccessConfig(ctx, req, opts...)
+}
+
+// DeleteNetworkInterface deletes one dynamic network interface from an active instance.
+// InstancesDeleteNetworkInterfaceRequest indicates:
+//
+//	instance from which to delete, using project+zone+resource_id fields;
+//
+//	dynamic network interface to be deleted, using network_interface_name
+//	field;
+func (c *InstancesClient) DeleteNetworkInterface(ctx context.Context, req *computepb.DeleteNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.DeleteNetworkInterface(ctx, req, opts...)
 }
 
 // DetachDisk detaches a disk from an instance.
@@ -386,7 +522,8 @@ func (c *InstancesClient) GetGuestAttributes(ctx context.Context, req *computepb
 	return c.internalClient.GetGuestAttributes(ctx, req, opts...)
 }
 
-// GetIamPolicy gets the access control policy for a resource. May be empty if no such policy or resource exists.
+// GetIamPolicy gets the access control policy for a resource. May be empty if no such
+// policy or resource exists.
 func (c *InstancesClient) GetIamPolicy(ctx context.Context, req *computepb.GetIamPolicyInstanceRequest, opts ...gax.CallOption) (*computepb.Policy, error) {
 	return c.internalClient.GetIamPolicy(ctx, req, opts...)
 }
@@ -406,19 +543,30 @@ func (c *InstancesClient) GetShieldedInstanceIdentity(ctx context.Context, req *
 	return c.internalClient.GetShieldedInstanceIdentity(ctx, req, opts...)
 }
 
-// Insert creates an instance resource in the specified project using the data included in the request.
+// Insert creates an instance resource in the specified project using the data
+// included in the request.
 func (c *InstancesClient) Insert(ctx context.Context, req *computepb.InsertInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Insert(ctx, req, opts...)
 }
 
-// List retrieves the list of instances contained within the specified zone.
+// List retrieves the list of instances contained within
+// the specified zone.
 func (c *InstancesClient) List(ctx context.Context, req *computepb.ListInstancesRequest, opts ...gax.CallOption) *InstanceIterator {
 	return c.internalClient.List(ctx, req, opts...)
 }
 
-// ListReferrers retrieves a list of resources that refer to the VM instance specified in the request. For example, if the VM instance is part of a managed or unmanaged instance group, the referrers list includes the instance group. For more information, read Viewing referrers to VM instances.
+// ListReferrers retrieves a list of resources that refer to the VM instance specified in
+// the request. For example, if the VM instance is part of a managed or
+// unmanaged instance group, the referrers list includes the instance group.
+// For more information, readViewing
+// referrers to VM instances.
 func (c *InstancesClient) ListReferrers(ctx context.Context, req *computepb.ListReferrersInstancesRequest, opts ...gax.CallOption) *ReferenceIterator {
 	return c.internalClient.ListReferrers(ctx, req, opts...)
+}
+
+// PerformMaintenance perform a manual maintenance on the instance.
+func (c *InstancesClient) PerformMaintenance(ctx context.Context, req *computepb.PerformMaintenanceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.PerformMaintenance(ctx, req, opts...)
 }
 
 // RemoveResourcePolicies removes resource policies from an instance.
@@ -426,12 +574,20 @@ func (c *InstancesClient) RemoveResourcePolicies(ctx context.Context, req *compu
 	return c.internalClient.RemoveResourcePolicies(ctx, req, opts...)
 }
 
-// Reset performs a reset on the instance. This is a hard reset. The VM does not do a graceful shutdown. For more information, see Resetting an instance.
+// ReportHostAsFaulty mark the host as faulty and try to restart the instance on a new host.
+func (c *InstancesClient) ReportHostAsFaulty(ctx context.Context, req *computepb.ReportHostAsFaultyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.ReportHostAsFaulty(ctx, req, opts...)
+}
+
+// Reset performs a reset on the instance. This is a hard reset. The VM
+// does not do a graceful shutdown. For more information, seeResetting
+// an instance.
 func (c *InstancesClient) Reset(ctx context.Context, req *computepb.ResetInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Reset(ctx, req, opts...)
 }
 
-// Resume resumes an instance that was suspended using the instances().suspend method.
+// Resume resumes an instance that was suspended using theinstances().suspend
+// method.
 func (c *InstancesClient) Resume(ctx context.Context, req *computepb.ResumeInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Resume(ctx, req, opts...)
 }
@@ -451,32 +607,40 @@ func (c *InstancesClient) SetDiskAutoDelete(ctx context.Context, req *computepb.
 	return c.internalClient.SetDiskAutoDelete(ctx, req, opts...)
 }
 
-// SetIamPolicy sets the access control policy on the specified resource. Replaces any existing policy.
+// SetIamPolicy sets the access control policy on the specified resource.
+// Replaces any existing policy.
 func (c *InstancesClient) SetIamPolicy(ctx context.Context, req *computepb.SetIamPolicyInstanceRequest, opts ...gax.CallOption) (*computepb.Policy, error) {
 	return c.internalClient.SetIamPolicy(ctx, req, opts...)
 }
 
-// SetLabels sets labels on an instance. To learn more about labels, read the Labeling Resources documentation.
+// SetLabels sets labels on an instance.  To learn more about labels, read theLabeling
+// Resources documentation.
 func (c *InstancesClient) SetLabels(ctx context.Context, req *computepb.SetLabelsInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetLabels(ctx, req, opts...)
 }
 
-// SetMachineResources changes the number and/or type of accelerator for a stopped instance to the values specified in the request.
+// SetMachineResources changes the number and/or type of accelerator for a stopped instance to the
+// values specified in the request.
 func (c *InstancesClient) SetMachineResources(ctx context.Context, req *computepb.SetMachineResourcesInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetMachineResources(ctx, req, opts...)
 }
 
-// SetMachineType changes the machine type for a stopped instance to the machine type specified in the request.
+// SetMachineType changes the machine type for a stopped instance to the machine
+// type specified in the request.
 func (c *InstancesClient) SetMachineType(ctx context.Context, req *computepb.SetMachineTypeInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetMachineType(ctx, req, opts...)
 }
 
-// SetMetadata sets metadata for the specified instance to the data included in the request.
+// SetMetadata sets metadata for the specified instance to the data included
+// in the request.
 func (c *InstancesClient) SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetMetadata(ctx, req, opts...)
 }
 
-// SetMinCpuPlatform changes the minimum CPU platform that this instance should use. This method can only be called on a stopped instance. For more information, read Specifying a Minimum CPU Platform.
+// SetMinCpuPlatform changes the minimum CPU platform that this instance should use.
+// This method can only
+// be called on a stopped instance. For more information, readSpecifying a
+// Minimum CPU Platform.
 func (c *InstancesClient) SetMinCpuPlatform(ctx context.Context, req *computepb.SetMinCpuPlatformInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetMinCpuPlatform(ctx, req, opts...)
 }
@@ -486,47 +650,81 @@ func (c *InstancesClient) SetName(ctx context.Context, req *computepb.SetNameIns
 	return c.internalClient.SetName(ctx, req, opts...)
 }
 
-// SetScheduling sets an instance’s scheduling options. You can only call this method on a stopped instance, that is, a VM instance that is in a TERMINATED state. See Instance Life Cycle for more information on the possible instance states. For more information about setting scheduling options for a VM, see Set VM host maintenance policy.
+// SetScheduling sets an instance’s scheduling options. You can only call this method on astopped instance,
+// that is, a VM instance that is in a TERMINATED state. SeeInstance Life
+// Cycle for more information on the possible instance states.
+// For more information about setting scheduling options for a VM, seeSet
+// VM host maintenance policy.
 func (c *InstancesClient) SetScheduling(ctx context.Context, req *computepb.SetSchedulingInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetScheduling(ctx, req, opts...)
 }
 
-// SetServiceAccount sets the service account on the instance. For more information, read Changing the service account and access scopes for an instance.
+// SetSecurityPolicy sets the Google Cloud Armor security policy for the specified instance.
+// For more information, seeGoogle
+// Cloud Armor Overview
+func (c *InstancesClient) SetSecurityPolicy(ctx context.Context, req *computepb.SetSecurityPolicyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.SetSecurityPolicy(ctx, req, opts...)
+}
+
+// SetServiceAccount sets the service account on the instance. For more information,
+// readChanging
+// the service account and access scopes for an instance.
 func (c *InstancesClient) SetServiceAccount(ctx context.Context, req *computepb.SetServiceAccountInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetServiceAccount(ctx, req, opts...)
 }
 
-// SetShieldedInstanceIntegrityPolicy sets the Shielded Instance integrity policy for an instance. You can only use this method on a running instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// SetShieldedInstanceIntegrityPolicy sets the Shielded Instance integrity policy for an instance. You can
+// only use this method on a running instance. This method
+// supports PATCH semantics and uses the JSON merge
+// patch format and processing rules.
 func (c *InstancesClient) SetShieldedInstanceIntegrityPolicy(ctx context.Context, req *computepb.SetShieldedInstanceIntegrityPolicyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetShieldedInstanceIntegrityPolicy(ctx, req, opts...)
 }
 
-// SetTags sets network tags for the specified instance to the data included in the request.
+// SetTags sets network tags
+// for the specified instance to the data included in the request.
 func (c *InstancesClient) SetTags(ctx context.Context, req *computepb.SetTagsInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetTags(ctx, req, opts...)
 }
 
-// SimulateMaintenanceEvent simulates a host maintenance event on a VM. For more information, see Simulate a host maintenance event.
+// SimulateMaintenanceEvent simulates a host maintenance event on a VM. For more information, see
+// Simulate a host maintenance event.
 func (c *InstancesClient) SimulateMaintenanceEvent(ctx context.Context, req *computepb.SimulateMaintenanceEventInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SimulateMaintenanceEvent(ctx, req, opts...)
 }
 
-// Start starts an instance that was stopped using the instances().stop method. For more information, see Restart an instance.
+// Start starts an instance that was stopped using theinstances().stop
+// method. For more information, seeRestart an
+// instance.
 func (c *InstancesClient) Start(ctx context.Context, req *computepb.StartInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Start(ctx, req, opts...)
 }
 
-// StartWithEncryptionKey starts an instance that was stopped using the instances().stop method. For more information, see Restart an instance.
+// StartWithEncryptionKey starts an instance that was stopped using theinstances().stop
+// method. For more information, seeRestart an
+// instance.
 func (c *InstancesClient) StartWithEncryptionKey(ctx context.Context, req *computepb.StartWithEncryptionKeyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.StartWithEncryptionKey(ctx, req, opts...)
 }
 
-// Stop stops a running instance, shutting it down cleanly, and allows you to restart the instance at a later time. Stopped instances do not incur VM usage charges while they are stopped. However, resources that the VM is using, such as persistent disks and static IP addresses, will continue to be charged until they are deleted. For more information, see Stopping an instance.
+// Stop stops a running instance, shutting it down cleanly, and allows
+// you to restart the instance at a later time. Stopped instances do not incur
+// VM usage charges while they are stopped. However, resources that the VM is
+// using, such as persistent disks and static IP addresses, will continue to
+// be charged until they are deleted. For more information, seeStopping
+// an instance.
 func (c *InstancesClient) Stop(ctx context.Context, req *computepb.StopInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Stop(ctx, req, opts...)
 }
 
-// Suspend this method suspends a running instance, saving its state to persistent storage, and allows you to resume the instance at a later time. Suspended instances have no compute costs (cores or RAM), and incur only storage charges for the saved VM memory and localSSD data. Any charged resources the virtual machine was using, such as persistent disks and static IP addresses, will continue to be charged while the instance is suspended. For more information, see Suspending and resuming an instance.
+// Suspend this method suspends a running instance, saving its state to persistent
+// storage, and allows you to resume the instance at a later time. Suspended
+// instances have no compute costs (cores or RAM), and incur only storage
+// charges for the saved VM memory and localSSD data. Any charged resources
+// the virtual machine was using, such as persistent disks and static IP
+// addresses, will continue to be charged while the instance is suspended.
+// For more information, see
+// Suspending and resuming an instance.
 func (c *InstancesClient) Suspend(ctx context.Context, req *computepb.SuspendInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Suspend(ctx, req, opts...)
 }
@@ -536,27 +734,44 @@ func (c *InstancesClient) TestIamPermissions(ctx context.Context, req *computepb
 	return c.internalClient.TestIamPermissions(ctx, req, opts...)
 }
 
-// Update updates an instance only if the necessary resources are available. This method can update only a specific set of instance properties. See Updating a running instance for a list of updatable instance properties.
+// Update updates an instance only if the necessary resources are available. This
+// method can update only a specific set of instance properties. See
+// Updating a running instance for a list of updatable instance
+// properties.
 func (c *InstancesClient) Update(ctx context.Context, req *computepb.UpdateInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Update(ctx, req, opts...)
 }
 
-// UpdateAccessConfig updates the specified access config from an instance’s network interface with the data included in the request. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateAccessConfig updates the specified access config from an instance’s network interface
+// with the data included in the request. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *InstancesClient) UpdateAccessConfig(ctx context.Context, req *computepb.UpdateAccessConfigInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.UpdateAccessConfig(ctx, req, opts...)
 }
 
-// UpdateDisplayDevice updates the Display config for a VM instance. You can only use this method on a stopped VM instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateDisplayDevice updates the Display config for a VM instance. You can
+// only use this method on a stopped VM instance. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *InstancesClient) UpdateDisplayDevice(ctx context.Context, req *computepb.UpdateDisplayDeviceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.UpdateDisplayDevice(ctx, req, opts...)
 }
 
-// UpdateNetworkInterface updates an instance’s network interface. This method can only update an interface’s alias IP range and attached network. See Modifying alias IP ranges for an existing instance for instructions on changing alias IP ranges. See Migrating a VM between networks for instructions on migrating an interface. This method follows PATCH semantics.
+// UpdateNetworkInterface updates an instance’s network interface. This method can only update an
+// interface’s alias IP range and attached network. See Modifying
+// alias IP ranges for an existing instance for instructions on
+// changing alias IP ranges. See Migrating
+// a VM between networks for instructions on migrating an interface.
+// This method follows PATCH semantics.
 func (c *InstancesClient) UpdateNetworkInterface(ctx context.Context, req *computepb.UpdateNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.UpdateNetworkInterface(ctx, req, opts...)
 }
 
-// UpdateShieldedInstanceConfig updates the Shielded Instance config for an instance. You can only use this method on a stopped instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateShieldedInstanceConfig updates the Shielded Instance config for an instance. You can
+// only use this method on a stopped instance. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *InstancesClient) UpdateShieldedInstanceConfig(ctx context.Context, req *computepb.UpdateShieldedInstanceConfigInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.UpdateShieldedInstanceConfig(ctx, req, opts...)
 }
@@ -572,11 +787,13 @@ type instancesRESTClient struct {
 	// operationClient is used to call the operation-specific management service.
 	operationClient *ZoneOperationsClient
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing InstancesClient
 	CallOptions **InstancesCallOptions
+
+	logger *slog.Logger
 }
 
 // NewInstancesRESTClient creates a new instances rest client.
@@ -594,6 +811,7 @@ func NewInstancesRESTClient(ctx context.Context, opts ...option.ClientOption) (*
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -613,9 +831,12 @@ func NewInstancesRESTClient(ctx context.Context, opts ...option.ClientOption) (*
 func defaultInstancesRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -623,9 +844,11 @@ func defaultInstancesRESTClientOptions() []option.ClientOption {
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *instancesRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -670,9 +893,11 @@ func (c *instancesRESTClient) AddAccessConfig(ctx context.Context, req *computep
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AddAccessConfig[0:len((*c.CallOptions).AddAccessConfig):len((*c.CallOptions).AddAccessConfig)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -687,23 +912,13 @@ func (c *instancesRESTClient) AddAccessConfig(ctx context.Context, req *computep
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AddAccessConfig")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -722,7 +937,76 @@ func (c *instancesRESTClient) AddAccessConfig(ctx context.Context, req *computep
 	return op, nil
 }
 
-// AddResourcePolicies adds existing resource policies to an instance. You can only add one policy right now which will be applied to this instance for scheduling live migrations.
+// AddNetworkInterface adds one dynamic network interface to an active instance.
+func (c *instancesRESTClient) AddNetworkInterface(ctx context.Context, req *computepb.AddNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetNetworkInterfaceResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/addNetworkInterface", req.GetProject(), req.GetZone(), req.GetInstance())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).AddNetworkInterface[0:len((*c.CallOptions).AddNetworkInterface):len((*c.CallOptions).AddNetworkInterface)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AddNetworkInterface")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&zoneOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			zone:    req.GetZone(),
+		},
+	}
+	return op, nil
+}
+
+// AddResourcePolicies adds existing resource policies to an instance. You can only add one
+// policy right now which will be applied to this instance for scheduling live
+// migrations.
 func (c *instancesRESTClient) AddResourcePolicies(ctx context.Context, req *computepb.AddResourcePoliciesInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesAddResourcePoliciesRequestResource()
@@ -745,9 +1029,11 @@ func (c *instancesRESTClient) AddResourcePolicies(ctx context.Context, req *comp
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AddResourcePolicies[0:len((*c.CallOptions).AddResourcePolicies):len((*c.CallOptions).AddResourcePolicies)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -762,23 +1048,13 @@ func (c *instancesRESTClient) AddResourcePolicies(ctx context.Context, req *comp
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AddResourcePolicies")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -797,7 +1073,14 @@ func (c *instancesRESTClient) AddResourcePolicies(ctx context.Context, req *comp
 	return op, nil
 }
 
-// AggregatedList retrieves an aggregated list of all of the instances in your project across all regions and zones. The performance of this method degrades when a filter is specified on a project that has a very large number of instances.
+// AggregatedList retrieves an aggregated list of all of the instances in your project
+// across all regions and zones.
+//
+// The performance of this method degrades when a filter is specified on a
+// project that has a very large number of instances.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *instancesRESTClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListInstancesRequest, opts ...gax.CallOption) *InstancesScopedListPairIterator {
 	it := &InstancesScopedListPairIterator{}
 	req = proto.Clone(req).(*computepb.AggregatedListInstancesRequest)
@@ -808,7 +1091,7 @@ func (c *instancesRESTClient) AggregatedList(ctx context.Context, req *computepb
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -837,11 +1120,15 @@ func (c *instancesRESTClient) AggregatedList(ctx context.Context, req *computepb
 		if req != nil && req.ReturnPartialSuccess != nil {
 			params.Add("returnPartialSuccess", fmt.Sprintf("%v", req.GetReturnPartialSuccess()))
 		}
+		if req != nil && req.ServiceProjectNumber != nil {
+			params.Add("serviceProjectNumber", fmt.Sprintf("%v", req.GetServiceProjectNumber()))
+		}
 
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -852,23 +1139,12 @@ func (c *instancesRESTClient) AggregatedList(ctx context.Context, req *computepb
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "AggregatedList")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -903,7 +1179,10 @@ func (c *instancesRESTClient) AggregatedList(ctx context.Context, req *computepb
 	return it
 }
 
-// AttachDisk attaches an existing Disk resource to an instance. You must first create the disk before you can attach it. It is not possible to create and attach a disk at the same time. For more information, read Adding a persistent disk to your instance.
+// AttachDisk attaches an existing Disk resource to an instance. You must first
+// create the disk before you can attach it. It is not possible to create
+// and attach a disk at the same time. For more information, readAdding a
+// persistent disk to your instance.
 func (c *instancesRESTClient) AttachDisk(ctx context.Context, req *computepb.AttachDiskInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetAttachedDiskResource()
@@ -929,9 +1208,11 @@ func (c *instancesRESTClient) AttachDisk(ctx context.Context, req *computepb.Att
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AttachDisk[0:len((*c.CallOptions).AttachDisk):len((*c.CallOptions).AttachDisk)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -946,23 +1227,13 @@ func (c *instancesRESTClient) AttachDisk(ctx context.Context, req *computepb.Att
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AttachDisk")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -981,7 +1252,9 @@ func (c *instancesRESTClient) AttachDisk(ctx context.Context, req *computepb.Att
 	return op, nil
 }
 
-// BulkInsert creates multiple instances. Count specifies the number of instances to create. For more information, see About bulk creation of VMs.
+// BulkInsert creates multiple instances. Count specifies the number of instances to
+// create. For more information, seeAbout bulk
+// creation of VMs.
 func (c *instancesRESTClient) BulkInsert(ctx context.Context, req *computepb.BulkInsertInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetBulkInsertInstanceResourceResource()
@@ -1004,9 +1277,11 @@ func (c *instancesRESTClient) BulkInsert(ctx context.Context, req *computepb.Bul
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).BulkInsert[0:len((*c.CallOptions).BulkInsert):len((*c.CallOptions).BulkInsert)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1021,23 +1296,13 @@ func (c *instancesRESTClient) BulkInsert(ctx context.Context, req *computepb.Bul
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "BulkInsert")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1056,7 +1321,8 @@ func (c *instancesRESTClient) BulkInsert(ctx context.Context, req *computepb.Bul
 	return op, nil
 }
 
-// Delete deletes the specified Instance resource. For more information, see Deleting an instance.
+// Delete deletes the specified Instance resource. For more information, seeDeleting
+// an instance.
 func (c *instancesRESTClient) Delete(ctx context.Context, req *computepb.DeleteInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -1072,9 +1338,11 @@ func (c *instancesRESTClient) Delete(ctx context.Context, req *computepb.DeleteI
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Delete[0:len((*c.CallOptions).Delete):len((*c.CallOptions).Delete)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1089,23 +1357,13 @@ func (c *instancesRESTClient) Delete(ctx context.Context, req *computepb.DeleteI
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Delete")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1142,9 +1400,11 @@ func (c *instancesRESTClient) DeleteAccessConfig(ctx context.Context, req *compu
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).DeleteAccessConfig[0:len((*c.CallOptions).DeleteAccessConfig):len((*c.CallOptions).DeleteAccessConfig)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1159,23 +1419,80 @@ func (c *instancesRESTClient) DeleteAccessConfig(ctx context.Context, req *compu
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "DeleteAccessConfig")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&zoneOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			zone:    req.GetZone(),
+		},
+	}
+	return op, nil
+}
+
+// DeleteNetworkInterface deletes one dynamic network interface from an active instance.
+// InstancesDeleteNetworkInterfaceRequest indicates:
+//
+//	instance from which to delete, using project+zone+resource_id fields;
+//
+//	dynamic network interface to be deleted, using network_interface_name
+//	field;
+func (c *instancesRESTClient) DeleteNetworkInterface(ctx context.Context, req *computepb.DeleteNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/deleteNetworkInterface", req.GetProject(), req.GetZone(), req.GetInstance())
+
+	params := url.Values{}
+	params.Add("networkInterfaceName", fmt.Sprintf("%v", req.GetNetworkInterfaceName()))
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).DeleteNetworkInterface[0:len((*c.CallOptions).DeleteNetworkInterface):len((*c.CallOptions).DeleteNetworkInterface)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), nil)
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "DeleteNetworkInterface")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
 		}
 
 		return nil
@@ -1211,9 +1528,11 @@ func (c *instancesRESTClient) DetachDisk(ctx context.Context, req *computepb.Det
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).DetachDisk[0:len((*c.CallOptions).DetachDisk):len((*c.CallOptions).DetachDisk)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1228,23 +1547,13 @@ func (c *instancesRESTClient) DetachDisk(ctx context.Context, req *computepb.Det
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "DetachDisk")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1272,9 +1581,11 @@ func (c *instancesRESTClient) Get(ctx context.Context, req *computepb.GetInstanc
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v", req.GetProject(), req.GetZone(), req.GetInstance())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Instance{}
@@ -1289,23 +1600,13 @@ func (c *instancesRESTClient) Get(ctx context.Context, req *computepb.GetInstanc
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1330,9 +1631,11 @@ func (c *instancesRESTClient) GetEffectiveFirewalls(ctx context.Context, req *co
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetEffectiveFirewalls[0:len((*c.CallOptions).GetEffectiveFirewalls):len((*c.CallOptions).GetEffectiveFirewalls)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.InstancesGetEffectiveFirewallsResponse{}
@@ -1347,23 +1650,13 @@ func (c *instancesRESTClient) GetEffectiveFirewalls(ctx context.Context, req *co
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetEffectiveFirewalls")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1393,9 +1686,11 @@ func (c *instancesRESTClient) GetGuestAttributes(ctx context.Context, req *compu
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetGuestAttributes[0:len((*c.CallOptions).GetGuestAttributes):len((*c.CallOptions).GetGuestAttributes)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.GuestAttributes{}
@@ -1410,23 +1705,13 @@ func (c *instancesRESTClient) GetGuestAttributes(ctx context.Context, req *compu
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetGuestAttributes")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1437,7 +1722,8 @@ func (c *instancesRESTClient) GetGuestAttributes(ctx context.Context, req *compu
 	return resp, nil
 }
 
-// GetIamPolicy gets the access control policy for a resource. May be empty if no such policy or resource exists.
+// GetIamPolicy gets the access control policy for a resource. May be empty if no such
+// policy or resource exists.
 func (c *instancesRESTClient) GetIamPolicy(ctx context.Context, req *computepb.GetIamPolicyInstanceRequest, opts ...gax.CallOption) (*computepb.Policy, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -1453,9 +1739,11 @@ func (c *instancesRESTClient) GetIamPolicy(ctx context.Context, req *computepb.G
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetIamPolicy[0:len((*c.CallOptions).GetIamPolicy):len((*c.CallOptions).GetIamPolicy)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Policy{}
@@ -1470,23 +1758,13 @@ func (c *instancesRESTClient) GetIamPolicy(ctx context.Context, req *computepb.G
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetIamPolicy")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1506,9 +1784,11 @@ func (c *instancesRESTClient) GetScreenshot(ctx context.Context, req *computepb.
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/screenshot", req.GetProject(), req.GetZone(), req.GetInstance())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetScreenshot[0:len((*c.CallOptions).GetScreenshot):len((*c.CallOptions).GetScreenshot)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Screenshot{}
@@ -1523,23 +1803,13 @@ func (c *instancesRESTClient) GetScreenshot(ctx context.Context, req *computepb.
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetScreenshot")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1569,9 +1839,11 @@ func (c *instancesRESTClient) GetSerialPortOutput(ctx context.Context, req *comp
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetSerialPortOutput[0:len((*c.CallOptions).GetSerialPortOutput):len((*c.CallOptions).GetSerialPortOutput)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.SerialPortOutput{}
@@ -1586,23 +1858,13 @@ func (c *instancesRESTClient) GetSerialPortOutput(ctx context.Context, req *comp
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetSerialPortOutput")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1622,9 +1884,11 @@ func (c *instancesRESTClient) GetShieldedInstanceIdentity(ctx context.Context, r
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/getShieldedInstanceIdentity", req.GetProject(), req.GetZone(), req.GetInstance())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetShieldedInstanceIdentity[0:len((*c.CallOptions).GetShieldedInstanceIdentity):len((*c.CallOptions).GetShieldedInstanceIdentity)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.ShieldedInstanceIdentity{}
@@ -1639,23 +1903,13 @@ func (c *instancesRESTClient) GetShieldedInstanceIdentity(ctx context.Context, r
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetShieldedInstanceIdentity")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1666,7 +1920,8 @@ func (c *instancesRESTClient) GetShieldedInstanceIdentity(ctx context.Context, r
 	return resp, nil
 }
 
-// Insert creates an instance resource in the specified project using the data included in the request.
+// Insert creates an instance resource in the specified project using the data
+// included in the request.
 func (c *instancesRESTClient) Insert(ctx context.Context, req *computepb.InsertInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceResource()
@@ -1695,9 +1950,11 @@ func (c *instancesRESTClient) Insert(ctx context.Context, req *computepb.InsertI
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Insert[0:len((*c.CallOptions).Insert):len((*c.CallOptions).Insert)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1712,23 +1969,13 @@ func (c *instancesRESTClient) Insert(ctx context.Context, req *computepb.InsertI
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Insert")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1747,7 +1994,8 @@ func (c *instancesRESTClient) Insert(ctx context.Context, req *computepb.InsertI
 	return op, nil
 }
 
-// List retrieves the list of instances contained within the specified zone.
+// List retrieves the list of instances contained within
+// the specified zone.
 func (c *instancesRESTClient) List(ctx context.Context, req *computepb.ListInstancesRequest, opts ...gax.CallOption) *InstanceIterator {
 	it := &InstanceIterator{}
 	req = proto.Clone(req).(*computepb.ListInstancesRequest)
@@ -1758,7 +2006,7 @@ func (c *instancesRESTClient) List(ctx context.Context, req *computepb.ListInsta
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -1788,7 +2036,8 @@ func (c *instancesRESTClient) List(ctx context.Context, req *computepb.ListInsta
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -1799,23 +2048,12 @@ func (c *instancesRESTClient) List(ctx context.Context, req *computepb.ListInsta
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "List")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1843,7 +2081,11 @@ func (c *instancesRESTClient) List(ctx context.Context, req *computepb.ListInsta
 	return it
 }
 
-// ListReferrers retrieves a list of resources that refer to the VM instance specified in the request. For example, if the VM instance is part of a managed or unmanaged instance group, the referrers list includes the instance group. For more information, read Viewing referrers to VM instances.
+// ListReferrers retrieves a list of resources that refer to the VM instance specified in
+// the request. For example, if the VM instance is part of a managed or
+// unmanaged instance group, the referrers list includes the instance group.
+// For more information, readViewing
+// referrers to VM instances.
 func (c *instancesRESTClient) ListReferrers(ctx context.Context, req *computepb.ListReferrersInstancesRequest, opts ...gax.CallOption) *ReferenceIterator {
 	it := &ReferenceIterator{}
 	req = proto.Clone(req).(*computepb.ListReferrersInstancesRequest)
@@ -1854,7 +2096,7 @@ func (c *instancesRESTClient) ListReferrers(ctx context.Context, req *computepb.
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -1884,7 +2126,8 @@ func (c *instancesRESTClient) ListReferrers(ctx context.Context, req *computepb.
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -1895,23 +2138,12 @@ func (c *instancesRESTClient) ListReferrers(ctx context.Context, req *computepb.
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "ListReferrers")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1939,6 +2171,66 @@ func (c *instancesRESTClient) ListReferrers(ctx context.Context, req *computepb.
 	return it
 }
 
+// PerformMaintenance perform a manual maintenance on the instance.
+func (c *instancesRESTClient) PerformMaintenance(ctx context.Context, req *computepb.PerformMaintenanceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/performMaintenance", req.GetProject(), req.GetZone(), req.GetInstance())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).PerformMaintenance[0:len((*c.CallOptions).PerformMaintenance):len((*c.CallOptions).PerformMaintenance)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), nil)
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "PerformMaintenance")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&zoneOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			zone:    req.GetZone(),
+		},
+	}
+	return op, nil
+}
+
 // RemoveResourcePolicies removes resource policies from an instance.
 func (c *instancesRESTClient) RemoveResourcePolicies(ctx context.Context, req *computepb.RemoveResourcePoliciesInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
@@ -1962,9 +2254,11 @@ func (c *instancesRESTClient) RemoveResourcePolicies(ctx context.Context, req *c
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).RemoveResourcePolicies[0:len((*c.CallOptions).RemoveResourcePolicies):len((*c.CallOptions).RemoveResourcePolicies)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1979,23 +2273,13 @@ func (c *instancesRESTClient) RemoveResourcePolicies(ctx context.Context, req *c
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "RemoveResourcePolicies")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2014,7 +2298,76 @@ func (c *instancesRESTClient) RemoveResourcePolicies(ctx context.Context, req *c
 	return op, nil
 }
 
-// Reset performs a reset on the instance. This is a hard reset. The VM does not do a graceful shutdown. For more information, see Resetting an instance.
+// ReportHostAsFaulty mark the host as faulty and try to restart the instance on a new host.
+func (c *instancesRESTClient) ReportHostAsFaulty(ctx context.Context, req *computepb.ReportHostAsFaultyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetInstancesReportHostAsFaultyRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/reportHostAsFaulty", req.GetProject(), req.GetZone(), req.GetInstance())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).ReportHostAsFaulty[0:len((*c.CallOptions).ReportHostAsFaulty):len((*c.CallOptions).ReportHostAsFaulty)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "ReportHostAsFaulty")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&zoneOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			zone:    req.GetZone(),
+		},
+	}
+	return op, nil
+}
+
+// Reset performs a reset on the instance. This is a hard reset. The VM
+// does not do a graceful shutdown. For more information, seeResetting
+// an instance.
 func (c *instancesRESTClient) Reset(ctx context.Context, req *computepb.ResetInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -2030,9 +2383,11 @@ func (c *instancesRESTClient) Reset(ctx context.Context, req *computepb.ResetIns
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Reset[0:len((*c.CallOptions).Reset):len((*c.CallOptions).Reset)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2047,23 +2402,13 @@ func (c *instancesRESTClient) Reset(ctx context.Context, req *computepb.ResetIns
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Reset")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2082,7 +2427,8 @@ func (c *instancesRESTClient) Reset(ctx context.Context, req *computepb.ResetIns
 	return op, nil
 }
 
-// Resume resumes an instance that was suspended using the instances().suspend method.
+// Resume resumes an instance that was suspended using theinstances().suspend
+// method.
 func (c *instancesRESTClient) Resume(ctx context.Context, req *computepb.ResumeInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -2098,9 +2444,11 @@ func (c *instancesRESTClient) Resume(ctx context.Context, req *computepb.ResumeI
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Resume[0:len((*c.CallOptions).Resume):len((*c.CallOptions).Resume)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2115,23 +2463,13 @@ func (c *instancesRESTClient) Resume(ctx context.Context, req *computepb.ResumeI
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Resume")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2159,9 +2497,11 @@ func (c *instancesRESTClient) SendDiagnosticInterrupt(ctx context.Context, req *
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/sendDiagnosticInterrupt", req.GetProject(), req.GetZone(), req.GetInstance())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SendDiagnosticInterrupt[0:len((*c.CallOptions).SendDiagnosticInterrupt):len((*c.CallOptions).SendDiagnosticInterrupt)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.SendDiagnosticInterruptInstanceResponse{}
@@ -2176,23 +2516,13 @@ func (c *instancesRESTClient) SendDiagnosticInterrupt(ctx context.Context, req *
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "SendDiagnosticInterrupt")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2222,9 +2552,11 @@ func (c *instancesRESTClient) SetDeletionProtection(ctx context.Context, req *co
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetDeletionProtection[0:len((*c.CallOptions).SetDeletionProtection):len((*c.CallOptions).SetDeletionProtection)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2239,23 +2571,13 @@ func (c *instancesRESTClient) SetDeletionProtection(ctx context.Context, req *co
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "SetDeletionProtection")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2292,9 +2614,11 @@ func (c *instancesRESTClient) SetDiskAutoDelete(ctx context.Context, req *comput
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetDiskAutoDelete[0:len((*c.CallOptions).SetDiskAutoDelete):len((*c.CallOptions).SetDiskAutoDelete)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2309,23 +2633,13 @@ func (c *instancesRESTClient) SetDiskAutoDelete(ctx context.Context, req *comput
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "SetDiskAutoDelete")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2344,7 +2658,8 @@ func (c *instancesRESTClient) SetDiskAutoDelete(ctx context.Context, req *comput
 	return op, nil
 }
 
-// SetIamPolicy sets the access control policy on the specified resource. Replaces any existing policy.
+// SetIamPolicy sets the access control policy on the specified resource.
+// Replaces any existing policy.
 func (c *instancesRESTClient) SetIamPolicy(ctx context.Context, req *computepb.SetIamPolicyInstanceRequest, opts ...gax.CallOption) (*computepb.Policy, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetZoneSetPolicyRequestResource()
@@ -2360,9 +2675,11 @@ func (c *instancesRESTClient) SetIamPolicy(ctx context.Context, req *computepb.S
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/setIamPolicy", req.GetProject(), req.GetZone(), req.GetResource())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetIamPolicy[0:len((*c.CallOptions).SetIamPolicy):len((*c.CallOptions).SetIamPolicy)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Policy{}
@@ -2377,23 +2694,13 @@ func (c *instancesRESTClient) SetIamPolicy(ctx context.Context, req *computepb.S
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetIamPolicy")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2404,7 +2711,8 @@ func (c *instancesRESTClient) SetIamPolicy(ctx context.Context, req *computepb.S
 	return resp, nil
 }
 
-// SetLabels sets labels on an instance. To learn more about labels, read the Labeling Resources documentation.
+// SetLabels sets labels on an instance.  To learn more about labels, read theLabeling
+// Resources documentation.
 func (c *instancesRESTClient) SetLabels(ctx context.Context, req *computepb.SetLabelsInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesSetLabelsRequestResource()
@@ -2427,9 +2735,11 @@ func (c *instancesRESTClient) SetLabels(ctx context.Context, req *computepb.SetL
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetLabels[0:len((*c.CallOptions).SetLabels):len((*c.CallOptions).SetLabels)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2444,23 +2754,13 @@ func (c *instancesRESTClient) SetLabels(ctx context.Context, req *computepb.SetL
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetLabels")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2479,7 +2779,8 @@ func (c *instancesRESTClient) SetLabels(ctx context.Context, req *computepb.SetL
 	return op, nil
 }
 
-// SetMachineResources changes the number and/or type of accelerator for a stopped instance to the values specified in the request.
+// SetMachineResources changes the number and/or type of accelerator for a stopped instance to the
+// values specified in the request.
 func (c *instancesRESTClient) SetMachineResources(ctx context.Context, req *computepb.SetMachineResourcesInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesSetMachineResourcesRequestResource()
@@ -2502,9 +2803,11 @@ func (c *instancesRESTClient) SetMachineResources(ctx context.Context, req *comp
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetMachineResources[0:len((*c.CallOptions).SetMachineResources):len((*c.CallOptions).SetMachineResources)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2519,23 +2822,13 @@ func (c *instancesRESTClient) SetMachineResources(ctx context.Context, req *comp
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetMachineResources")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2554,7 +2847,8 @@ func (c *instancesRESTClient) SetMachineResources(ctx context.Context, req *comp
 	return op, nil
 }
 
-// SetMachineType changes the machine type for a stopped instance to the machine type specified in the request.
+// SetMachineType changes the machine type for a stopped instance to the machine
+// type specified in the request.
 func (c *instancesRESTClient) SetMachineType(ctx context.Context, req *computepb.SetMachineTypeInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesSetMachineTypeRequestResource()
@@ -2577,9 +2871,11 @@ func (c *instancesRESTClient) SetMachineType(ctx context.Context, req *computepb
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetMachineType[0:len((*c.CallOptions).SetMachineType):len((*c.CallOptions).SetMachineType)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2594,23 +2890,13 @@ func (c *instancesRESTClient) SetMachineType(ctx context.Context, req *computepb
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetMachineType")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2629,7 +2915,8 @@ func (c *instancesRESTClient) SetMachineType(ctx context.Context, req *computepb
 	return op, nil
 }
 
-// SetMetadata sets metadata for the specified instance to the data included in the request.
+// SetMetadata sets metadata for the specified instance to the data included
+// in the request.
 func (c *instancesRESTClient) SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetMetadataResource()
@@ -2652,9 +2939,11 @@ func (c *instancesRESTClient) SetMetadata(ctx context.Context, req *computepb.Se
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetMetadata[0:len((*c.CallOptions).SetMetadata):len((*c.CallOptions).SetMetadata)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2669,23 +2958,13 @@ func (c *instancesRESTClient) SetMetadata(ctx context.Context, req *computepb.Se
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetMetadata")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2704,7 +2983,10 @@ func (c *instancesRESTClient) SetMetadata(ctx context.Context, req *computepb.Se
 	return op, nil
 }
 
-// SetMinCpuPlatform changes the minimum CPU platform that this instance should use. This method can only be called on a stopped instance. For more information, read Specifying a Minimum CPU Platform.
+// SetMinCpuPlatform changes the minimum CPU platform that this instance should use.
+// This method can only
+// be called on a stopped instance. For more information, readSpecifying a
+// Minimum CPU Platform.
 func (c *instancesRESTClient) SetMinCpuPlatform(ctx context.Context, req *computepb.SetMinCpuPlatformInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesSetMinCpuPlatformRequestResource()
@@ -2727,9 +3009,11 @@ func (c *instancesRESTClient) SetMinCpuPlatform(ctx context.Context, req *comput
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetMinCpuPlatform[0:len((*c.CallOptions).SetMinCpuPlatform):len((*c.CallOptions).SetMinCpuPlatform)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2744,23 +3028,13 @@ func (c *instancesRESTClient) SetMinCpuPlatform(ctx context.Context, req *comput
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetMinCpuPlatform")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2802,9 +3076,11 @@ func (c *instancesRESTClient) SetName(ctx context.Context, req *computepb.SetNam
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetName[0:len((*c.CallOptions).SetName):len((*c.CallOptions).SetName)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2819,23 +3095,13 @@ func (c *instancesRESTClient) SetName(ctx context.Context, req *computepb.SetNam
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetName")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2854,7 +3120,11 @@ func (c *instancesRESTClient) SetName(ctx context.Context, req *computepb.SetNam
 	return op, nil
 }
 
-// SetScheduling sets an instance’s scheduling options. You can only call this method on a stopped instance, that is, a VM instance that is in a TERMINATED state. See Instance Life Cycle for more information on the possible instance states. For more information about setting scheduling options for a VM, see Set VM host maintenance policy.
+// SetScheduling sets an instance’s scheduling options. You can only call this method on astopped instance,
+// that is, a VM instance that is in a TERMINATED state. SeeInstance Life
+// Cycle for more information on the possible instance states.
+// For more information about setting scheduling options for a VM, seeSet
+// VM host maintenance policy.
 func (c *instancesRESTClient) SetScheduling(ctx context.Context, req *computepb.SetSchedulingInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetSchedulingResource()
@@ -2877,9 +3147,11 @@ func (c *instancesRESTClient) SetScheduling(ctx context.Context, req *computepb.
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetScheduling[0:len((*c.CallOptions).SetScheduling):len((*c.CallOptions).SetScheduling)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2894,23 +3166,13 @@ func (c *instancesRESTClient) SetScheduling(ctx context.Context, req *computepb.
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetScheduling")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -2929,7 +3191,78 @@ func (c *instancesRESTClient) SetScheduling(ctx context.Context, req *computepb.
 	return op, nil
 }
 
-// SetServiceAccount sets the service account on the instance. For more information, read Changing the service account and access scopes for an instance.
+// SetSecurityPolicy sets the Google Cloud Armor security policy for the specified instance.
+// For more information, seeGoogle
+// Cloud Armor Overview
+func (c *instancesRESTClient) SetSecurityPolicy(ctx context.Context, req *computepb.SetSecurityPolicyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetInstancesSetSecurityPolicyRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/setSecurityPolicy", req.GetProject(), req.GetZone(), req.GetInstance())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).SetSecurityPolicy[0:len((*c.CallOptions).SetSecurityPolicy):len((*c.CallOptions).SetSecurityPolicy)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetSecurityPolicy")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&zoneOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			zone:    req.GetZone(),
+		},
+	}
+	return op, nil
+}
+
+// SetServiceAccount sets the service account on the instance. For more information,
+// readChanging
+// the service account and access scopes for an instance.
 func (c *instancesRESTClient) SetServiceAccount(ctx context.Context, req *computepb.SetServiceAccountInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesSetServiceAccountRequestResource()
@@ -2952,9 +3285,11 @@ func (c *instancesRESTClient) SetServiceAccount(ctx context.Context, req *comput
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetServiceAccount[0:len((*c.CallOptions).SetServiceAccount):len((*c.CallOptions).SetServiceAccount)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -2969,23 +3304,13 @@ func (c *instancesRESTClient) SetServiceAccount(ctx context.Context, req *comput
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetServiceAccount")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3004,7 +3329,10 @@ func (c *instancesRESTClient) SetServiceAccount(ctx context.Context, req *comput
 	return op, nil
 }
 
-// SetShieldedInstanceIntegrityPolicy sets the Shielded Instance integrity policy for an instance. You can only use this method on a running instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// SetShieldedInstanceIntegrityPolicy sets the Shielded Instance integrity policy for an instance. You can
+// only use this method on a running instance. This method
+// supports PATCH semantics and uses the JSON merge
+// patch format and processing rules.
 func (c *instancesRESTClient) SetShieldedInstanceIntegrityPolicy(ctx context.Context, req *computepb.SetShieldedInstanceIntegrityPolicyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetShieldedInstanceIntegrityPolicyResource()
@@ -3027,9 +3355,11 @@ func (c *instancesRESTClient) SetShieldedInstanceIntegrityPolicy(ctx context.Con
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetShieldedInstanceIntegrityPolicy[0:len((*c.CallOptions).SetShieldedInstanceIntegrityPolicy):len((*c.CallOptions).SetShieldedInstanceIntegrityPolicy)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3044,23 +3374,13 @@ func (c *instancesRESTClient) SetShieldedInstanceIntegrityPolicy(ctx context.Con
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetShieldedInstanceIntegrityPolicy")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3079,7 +3399,8 @@ func (c *instancesRESTClient) SetShieldedInstanceIntegrityPolicy(ctx context.Con
 	return op, nil
 }
 
-// SetTags sets network tags for the specified instance to the data included in the request.
+// SetTags sets network tags
+// for the specified instance to the data included in the request.
 func (c *instancesRESTClient) SetTags(ctx context.Context, req *computepb.SetTagsInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetTagsResource()
@@ -3102,9 +3423,11 @@ func (c *instancesRESTClient) SetTags(ctx context.Context, req *computepb.SetTag
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetTags[0:len((*c.CallOptions).SetTags):len((*c.CallOptions).SetTags)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3119,23 +3442,13 @@ func (c *instancesRESTClient) SetTags(ctx context.Context, req *computepb.SetTag
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetTags")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3154,7 +3467,8 @@ func (c *instancesRESTClient) SetTags(ctx context.Context, req *computepb.SetTag
 	return op, nil
 }
 
-// SimulateMaintenanceEvent simulates a host maintenance event on a VM. For more information, see Simulate a host maintenance event.
+// SimulateMaintenanceEvent simulates a host maintenance event on a VM. For more information, see
+// Simulate a host maintenance event.
 func (c *instancesRESTClient) SimulateMaintenanceEvent(ctx context.Context, req *computepb.SimulateMaintenanceEventInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -3162,10 +3476,22 @@ func (c *instancesRESTClient) SimulateMaintenanceEvent(ctx context.Context, req 
 	}
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/simulateMaintenanceEvent", req.GetProject(), req.GetZone(), req.GetInstance())
 
-	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+	if req != nil && req.WithExtendedNotifications != nil {
+		params.Add("withExtendedNotifications", fmt.Sprintf("%v", req.GetWithExtendedNotifications()))
+	}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SimulateMaintenanceEvent[0:len((*c.CallOptions).SimulateMaintenanceEvent):len((*c.CallOptions).SimulateMaintenanceEvent)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3180,23 +3506,13 @@ func (c *instancesRESTClient) SimulateMaintenanceEvent(ctx context.Context, req 
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "SimulateMaintenanceEvent")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3215,7 +3531,9 @@ func (c *instancesRESTClient) SimulateMaintenanceEvent(ctx context.Context, req 
 	return op, nil
 }
 
-// Start starts an instance that was stopped using the instances().stop method. For more information, see Restart an instance.
+// Start starts an instance that was stopped using theinstances().stop
+// method. For more information, seeRestart an
+// instance.
 func (c *instancesRESTClient) Start(ctx context.Context, req *computepb.StartInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -3231,9 +3549,11 @@ func (c *instancesRESTClient) Start(ctx context.Context, req *computepb.StartIns
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Start[0:len((*c.CallOptions).Start):len((*c.CallOptions).Start)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3248,23 +3568,13 @@ func (c *instancesRESTClient) Start(ctx context.Context, req *computepb.StartIns
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Start")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3283,7 +3593,9 @@ func (c *instancesRESTClient) Start(ctx context.Context, req *computepb.StartIns
 	return op, nil
 }
 
-// StartWithEncryptionKey starts an instance that was stopped using the instances().stop method. For more information, see Restart an instance.
+// StartWithEncryptionKey starts an instance that was stopped using theinstances().stop
+// method. For more information, seeRestart an
+// instance.
 func (c *instancesRESTClient) StartWithEncryptionKey(ctx context.Context, req *computepb.StartWithEncryptionKeyInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstancesStartWithEncryptionKeyRequestResource()
@@ -3306,9 +3618,11 @@ func (c *instancesRESTClient) StartWithEncryptionKey(ctx context.Context, req *c
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).StartWithEncryptionKey[0:len((*c.CallOptions).StartWithEncryptionKey):len((*c.CallOptions).StartWithEncryptionKey)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3323,23 +3637,13 @@ func (c *instancesRESTClient) StartWithEncryptionKey(ctx context.Context, req *c
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "StartWithEncryptionKey")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3358,7 +3662,12 @@ func (c *instancesRESTClient) StartWithEncryptionKey(ctx context.Context, req *c
 	return op, nil
 }
 
-// Stop stops a running instance, shutting it down cleanly, and allows you to restart the instance at a later time. Stopped instances do not incur VM usage charges while they are stopped. However, resources that the VM is using, such as persistent disks and static IP addresses, will continue to be charged until they are deleted. For more information, see Stopping an instance.
+// Stop stops a running instance, shutting it down cleanly, and allows
+// you to restart the instance at a later time. Stopped instances do not incur
+// VM usage charges while they are stopped. However, resources that the VM is
+// using, such as persistent disks and static IP addresses, will continue to
+// be charged until they are deleted. For more information, seeStopping
+// an instance.
 func (c *instancesRESTClient) Stop(ctx context.Context, req *computepb.StopInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -3377,9 +3686,11 @@ func (c *instancesRESTClient) Stop(ctx context.Context, req *computepb.StopInsta
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Stop[0:len((*c.CallOptions).Stop):len((*c.CallOptions).Stop)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3394,23 +3705,13 @@ func (c *instancesRESTClient) Stop(ctx context.Context, req *computepb.StopInsta
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Stop")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3429,7 +3730,14 @@ func (c *instancesRESTClient) Stop(ctx context.Context, req *computepb.StopInsta
 	return op, nil
 }
 
-// Suspend this method suspends a running instance, saving its state to persistent storage, and allows you to resume the instance at a later time. Suspended instances have no compute costs (cores or RAM), and incur only storage charges for the saved VM memory and localSSD data. Any charged resources the virtual machine was using, such as persistent disks and static IP addresses, will continue to be charged while the instance is suspended. For more information, see Suspending and resuming an instance.
+// Suspend this method suspends a running instance, saving its state to persistent
+// storage, and allows you to resume the instance at a later time. Suspended
+// instances have no compute costs (cores or RAM), and incur only storage
+// charges for the saved VM memory and localSSD data. Any charged resources
+// the virtual machine was using, such as persistent disks and static IP
+// addresses, will continue to be charged while the instance is suspended.
+// For more information, see
+// Suspending and resuming an instance.
 func (c *instancesRESTClient) Suspend(ctx context.Context, req *computepb.SuspendInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -3448,9 +3756,11 @@ func (c *instancesRESTClient) Suspend(ctx context.Context, req *computepb.Suspen
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Suspend[0:len((*c.CallOptions).Suspend):len((*c.CallOptions).Suspend)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3465,23 +3775,13 @@ func (c *instancesRESTClient) Suspend(ctx context.Context, req *computepb.Suspen
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Suspend")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3516,9 +3816,11 @@ func (c *instancesRESTClient) TestIamPermissions(ctx context.Context, req *compu
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/instances/%v/testIamPermissions", req.GetProject(), req.GetZone(), req.GetResource())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).TestIamPermissions[0:len((*c.CallOptions).TestIamPermissions):len((*c.CallOptions).TestIamPermissions)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.TestPermissionsResponse{}
@@ -3533,23 +3835,13 @@ func (c *instancesRESTClient) TestIamPermissions(ctx context.Context, req *compu
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "TestIamPermissions")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3560,7 +3852,10 @@ func (c *instancesRESTClient) TestIamPermissions(ctx context.Context, req *compu
 	return resp, nil
 }
 
-// Update updates an instance only if the necessary resources are available. This method can update only a specific set of instance properties. See Updating a running instance for a list of updatable instance properties.
+// Update updates an instance only if the necessary resources are available. This
+// method can update only a specific set of instance properties. See
+// Updating a running instance for a list of updatable instance
+// properties.
 func (c *instancesRESTClient) Update(ctx context.Context, req *computepb.UpdateInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceResource()
@@ -3589,9 +3884,11 @@ func (c *instancesRESTClient) Update(ctx context.Context, req *computepb.UpdateI
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Update[0:len((*c.CallOptions).Update):len((*c.CallOptions).Update)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3606,23 +3903,13 @@ func (c *instancesRESTClient) Update(ctx context.Context, req *computepb.UpdateI
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Update")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3641,7 +3928,10 @@ func (c *instancesRESTClient) Update(ctx context.Context, req *computepb.UpdateI
 	return op, nil
 }
 
-// UpdateAccessConfig updates the specified access config from an instance’s network interface with the data included in the request. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateAccessConfig updates the specified access config from an instance’s network interface
+// with the data included in the request. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *instancesRESTClient) UpdateAccessConfig(ctx context.Context, req *computepb.UpdateAccessConfigInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetAccessConfigResource()
@@ -3665,9 +3955,11 @@ func (c *instancesRESTClient) UpdateAccessConfig(ctx context.Context, req *compu
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).UpdateAccessConfig[0:len((*c.CallOptions).UpdateAccessConfig):len((*c.CallOptions).UpdateAccessConfig)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3682,23 +3974,13 @@ func (c *instancesRESTClient) UpdateAccessConfig(ctx context.Context, req *compu
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "UpdateAccessConfig")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3717,7 +3999,10 @@ func (c *instancesRESTClient) UpdateAccessConfig(ctx context.Context, req *compu
 	return op, nil
 }
 
-// UpdateDisplayDevice updates the Display config for a VM instance. You can only use this method on a stopped VM instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateDisplayDevice updates the Display config for a VM instance. You can
+// only use this method on a stopped VM instance. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *instancesRESTClient) UpdateDisplayDevice(ctx context.Context, req *computepb.UpdateDisplayDeviceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetDisplayDeviceResource()
@@ -3740,9 +4025,11 @@ func (c *instancesRESTClient) UpdateDisplayDevice(ctx context.Context, req *comp
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).UpdateDisplayDevice[0:len((*c.CallOptions).UpdateDisplayDevice):len((*c.CallOptions).UpdateDisplayDevice)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3757,23 +4044,13 @@ func (c *instancesRESTClient) UpdateDisplayDevice(ctx context.Context, req *comp
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "UpdateDisplayDevice")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3792,7 +4069,12 @@ func (c *instancesRESTClient) UpdateDisplayDevice(ctx context.Context, req *comp
 	return op, nil
 }
 
-// UpdateNetworkInterface updates an instance’s network interface. This method can only update an interface’s alias IP range and attached network. See Modifying alias IP ranges for an existing instance for instructions on changing alias IP ranges. See Migrating a VM between networks for instructions on migrating an interface. This method follows PATCH semantics.
+// UpdateNetworkInterface updates an instance’s network interface. This method can only update an
+// interface’s alias IP range and attached network. See Modifying
+// alias IP ranges for an existing instance for instructions on
+// changing alias IP ranges. See Migrating
+// a VM between networks for instructions on migrating an interface.
+// This method follows PATCH semantics.
 func (c *instancesRESTClient) UpdateNetworkInterface(ctx context.Context, req *computepb.UpdateNetworkInterfaceInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetNetworkInterfaceResource()
@@ -3816,9 +4098,11 @@ func (c *instancesRESTClient) UpdateNetworkInterface(ctx context.Context, req *c
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).UpdateNetworkInterface[0:len((*c.CallOptions).UpdateNetworkInterface):len((*c.CallOptions).UpdateNetworkInterface)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3833,23 +4117,13 @@ func (c *instancesRESTClient) UpdateNetworkInterface(ctx context.Context, req *c
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "UpdateNetworkInterface")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3868,7 +4142,10 @@ func (c *instancesRESTClient) UpdateNetworkInterface(ctx context.Context, req *c
 	return op, nil
 }
 
-// UpdateShieldedInstanceConfig updates the Shielded Instance config for an instance. You can only use this method on a stopped instance. This method supports PATCH semantics and uses the JSON merge patch format and processing rules.
+// UpdateShieldedInstanceConfig updates the Shielded Instance config for an instance. You can
+// only use this method on a stopped instance. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
 func (c *instancesRESTClient) UpdateShieldedInstanceConfig(ctx context.Context, req *computepb.UpdateShieldedInstanceConfigInstanceRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetShieldedInstanceConfigResource()
@@ -3891,9 +4168,11 @@ func (c *instancesRESTClient) UpdateShieldedInstanceConfig(ctx context.Context, 
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "instance", url.QueryEscape(req.GetInstance()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).UpdateShieldedInstanceConfig[0:len((*c.CallOptions).UpdateShieldedInstanceConfig):len((*c.CallOptions).UpdateShieldedInstanceConfig)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -3908,23 +4187,13 @@ func (c *instancesRESTClient) UpdateShieldedInstanceConfig(ctx context.Context, 
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "UpdateShieldedInstanceConfig")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -3941,151 +4210,4 @@ func (c *instancesRESTClient) UpdateShieldedInstanceConfig(ctx context.Context, 
 		},
 	}
 	return op, nil
-}
-
-// InstanceIterator manages a stream of *computepb.Instance.
-type InstanceIterator struct {
-	items    []*computepb.Instance
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []*computepb.Instance, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *InstanceIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *InstanceIterator) Next() (*computepb.Instance, error) {
-	var item *computepb.Instance
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *InstanceIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *InstanceIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
-}
-
-// InstancesScopedListPair is a holder type for string/*computepb.InstancesScopedList map entries
-type InstancesScopedListPair struct {
-	Key   string
-	Value *computepb.InstancesScopedList
-}
-
-// InstancesScopedListPairIterator manages a stream of InstancesScopedListPair.
-type InstancesScopedListPairIterator struct {
-	items    []InstancesScopedListPair
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []InstancesScopedListPair, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *InstancesScopedListPairIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *InstancesScopedListPairIterator) Next() (InstancesScopedListPair, error) {
-	var item InstancesScopedListPair
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *InstancesScopedListPairIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *InstancesScopedListPairIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
-}
-
-// ReferenceIterator manages a stream of *computepb.Reference.
-type ReferenceIterator struct {
-	items    []*computepb.Reference
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []*computepb.Reference, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *ReferenceIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *ReferenceIterator) Next() (*computepb.Reference, error) {
-	var item *computepb.Reference
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *ReferenceIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *ReferenceIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
 }
