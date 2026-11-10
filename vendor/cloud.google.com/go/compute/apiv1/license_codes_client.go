@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,19 +20,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -47,6 +45,7 @@ type LicenseCodesCallOptions struct {
 func defaultLicenseCodesRESTCallOptions() *LicenseCodesCallOptions {
 	return &LicenseCodesCallOptions{
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -57,7 +56,9 @@ func defaultLicenseCodesRESTCallOptions() *LicenseCodesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		TestIamPermissions: []gax.CallOption{},
+		TestIamPermissions: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 	}
 }
 
@@ -105,12 +106,19 @@ func (c *LicenseCodesClient) Connection() *grpc.ClientConn {
 	return c.internalClient.Connection()
 }
 
-// Get return a specified license code. License codes are mirrored across all projects that have permissions to read the License Code. Caution This resource is intended for use only by third-party partners who are creating Cloud Marketplace images.
+// Get return a specified license code. License codes are mirrored across
+// all projects that have permissions to read the License Code.
+// Caution This resource is intended
+// for use only by third-party partners who are creatingCloud Marketplace
+// images.
 func (c *LicenseCodesClient) Get(ctx context.Context, req *computepb.GetLicenseCodeRequest, opts ...gax.CallOption) (*computepb.LicenseCode, error) {
 	return c.internalClient.Get(ctx, req, opts...)
 }
 
-// TestIamPermissions returns permissions that a caller has on the specified resource. Caution This resource is intended for use only by third-party partners who are creating Cloud Marketplace images.
+// TestIamPermissions returns permissions that a caller has on the specified resource.
+// Caution This resource is intended
+// for use only by third-party partners who are creatingCloud Marketplace
+// images.
 func (c *LicenseCodesClient) TestIamPermissions(ctx context.Context, req *computepb.TestIamPermissionsLicenseCodeRequest, opts ...gax.CallOption) (*computepb.TestPermissionsResponse, error) {
 	return c.internalClient.TestIamPermissions(ctx, req, opts...)
 }
@@ -123,11 +131,13 @@ type licenseCodesRESTClient struct {
 	// The http client.
 	httpClient *http.Client
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing LicenseCodesClient
 	CallOptions **LicenseCodesCallOptions
+
+	logger *slog.Logger
 }
 
 // NewLicenseCodesRESTClient creates a new license codes rest client.
@@ -145,6 +155,7 @@ func NewLicenseCodesRESTClient(ctx context.Context, opts ...option.ClientOption)
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -154,9 +165,12 @@ func NewLicenseCodesRESTClient(ctx context.Context, opts ...option.ClientOption)
 func defaultLicenseCodesRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -164,9 +178,11 @@ func defaultLicenseCodesRESTClientOptions() []option.ClientOption {
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *licenseCodesRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -184,7 +200,11 @@ func (c *licenseCodesRESTClient) Connection() *grpc.ClientConn {
 	return nil
 }
 
-// Get return a specified license code. License codes are mirrored across all projects that have permissions to read the License Code. Caution This resource is intended for use only by third-party partners who are creating Cloud Marketplace images.
+// Get return a specified license code. License codes are mirrored across
+// all projects that have permissions to read the License Code.
+// Caution This resource is intended
+// for use only by third-party partners who are creatingCloud Marketplace
+// images.
 func (c *licenseCodesRESTClient) Get(ctx context.Context, req *computepb.GetLicenseCodeRequest, opts ...gax.CallOption) (*computepb.LicenseCode, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -193,9 +213,11 @@ func (c *licenseCodesRESTClient) Get(ctx context.Context, req *computepb.GetLice
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/global/licenseCodes/%v", req.GetProject(), req.GetLicenseCode())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "license_code", url.QueryEscape(req.GetLicenseCode())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "license_code", url.QueryEscape(req.GetLicenseCode()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.LicenseCode{}
@@ -210,23 +232,13 @@ func (c *licenseCodesRESTClient) Get(ctx context.Context, req *computepb.GetLice
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -237,7 +249,10 @@ func (c *licenseCodesRESTClient) Get(ctx context.Context, req *computepb.GetLice
 	return resp, nil
 }
 
-// TestIamPermissions returns permissions that a caller has on the specified resource. Caution This resource is intended for use only by third-party partners who are creating Cloud Marketplace images.
+// TestIamPermissions returns permissions that a caller has on the specified resource.
+// Caution This resource is intended
+// for use only by third-party partners who are creatingCloud Marketplace
+// images.
 func (c *licenseCodesRESTClient) TestIamPermissions(ctx context.Context, req *computepb.TestIamPermissionsLicenseCodeRequest, opts ...gax.CallOption) (*computepb.TestPermissionsResponse, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetTestPermissionsRequestResource()
@@ -253,9 +268,11 @@ func (c *licenseCodesRESTClient) TestIamPermissions(ctx context.Context, req *co
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/global/licenseCodes/%v/testIamPermissions", req.GetProject(), req.GetResource())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).TestIamPermissions[0:len((*c.CallOptions).TestIamPermissions):len((*c.CallOptions).TestIamPermissions)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.TestPermissionsResponse{}
@@ -270,23 +287,13 @@ func (c *licenseCodesRESTClient) TestIamPermissions(ctx context.Context, req *co
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "TestIamPermissions")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil

@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -28,13 +28,11 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -59,20 +57,37 @@ type RegionInstanceGroupManagersCallOptions struct {
 	PatchPerInstanceConfigs  []gax.CallOption
 	RecreateInstances        []gax.CallOption
 	Resize                   []gax.CallOption
+	ResumeInstances          []gax.CallOption
 	SetInstanceTemplate      []gax.CallOption
 	SetTargetPools           []gax.CallOption
+	StartInstances           []gax.CallOption
+	StopInstances            []gax.CallOption
+	SuspendInstances         []gax.CallOption
 	UpdatePerInstanceConfigs []gax.CallOption
 }
 
 func defaultRegionInstanceGroupManagersRESTCallOptions() *RegionInstanceGroupManagersCallOptions {
 	return &RegionInstanceGroupManagersCallOptions{
-		AbandonInstances:         []gax.CallOption{},
-		ApplyUpdatesToInstances:  []gax.CallOption{},
-		CreateInstances:          []gax.CallOption{},
-		Delete:                   []gax.CallOption{},
-		DeleteInstances:          []gax.CallOption{},
-		DeletePerInstanceConfigs: []gax.CallOption{},
+		AbandonInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		ApplyUpdatesToInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		CreateInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Delete: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		DeleteInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		DeletePerInstanceConfigs: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -83,8 +98,11 @@ func defaultRegionInstanceGroupManagersRESTCallOptions() *RegionInstanceGroupMan
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Insert: []gax.CallOption{},
+		Insert: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		List: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -96,6 +114,7 @@ func defaultRegionInstanceGroupManagersRESTCallOptions() *RegionInstanceGroupMan
 			}),
 		},
 		ListErrors: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -106,15 +125,45 @@ func defaultRegionInstanceGroupManagersRESTCallOptions() *RegionInstanceGroupMan
 					http.StatusServiceUnavailable)
 			}),
 		},
-		ListManagedInstances:     []gax.CallOption{},
-		ListPerInstanceConfigs:   []gax.CallOption{},
-		Patch:                    []gax.CallOption{},
-		PatchPerInstanceConfigs:  []gax.CallOption{},
-		RecreateInstances:        []gax.CallOption{},
-		Resize:                   []gax.CallOption{},
-		SetInstanceTemplate:      []gax.CallOption{},
-		SetTargetPools:           []gax.CallOption{},
-		UpdatePerInstanceConfigs: []gax.CallOption{},
+		ListManagedInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		ListPerInstanceConfigs: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Patch: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		PatchPerInstanceConfigs: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		RecreateInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		Resize: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		ResumeInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetInstanceTemplate: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetTargetPools: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		StartInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		StopInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SuspendInstances: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		UpdatePerInstanceConfigs: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 	}
 }
 
@@ -139,8 +188,12 @@ type internalRegionInstanceGroupManagersClient interface {
 	PatchPerInstanceConfigs(context.Context, *computepb.PatchPerInstanceConfigsRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 	RecreateInstances(context.Context, *computepb.RecreateInstancesRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 	Resize(context.Context, *computepb.ResizeRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
+	ResumeInstances(context.Context, *computepb.ResumeInstancesRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 	SetInstanceTemplate(context.Context, *computepb.SetInstanceTemplateRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 	SetTargetPools(context.Context, *computepb.SetTargetPoolsRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
+	StartInstances(context.Context, *computepb.StartInstancesRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
+	StopInstances(context.Context, *computepb.StopInstancesRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
+	SuspendInstances(context.Context, *computepb.SuspendInstancesRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 	UpdatePerInstanceConfigs(context.Context, *computepb.UpdatePerInstanceConfigsRegionInstanceGroupManagerRequest, ...gax.CallOption) (*Operation, error)
 }
 
@@ -179,7 +232,21 @@ func (c *RegionInstanceGroupManagersClient) Connection() *grpc.ClientConn {
 	return c.internalClient.Connection()
 }
 
-// AbandonInstances flags the specified instances to be immediately removed from the managed instance group. Abandoning an instance does not delete the instance, but it does remove the instance from any target pools that are applied by the managed instance group. This method reduces the targetSize of the managed instance group by the number of instances that you abandon. This operation is marked as DONE when the action is scheduled even if the instances have not yet been removed from the group. You must separately verify the status of the abandoning action with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// AbandonInstances flags the specified instances to be immediately removed from the managed
+// instance group. Abandoning an instance does not delete the
+// instance, but it does remove the instance from any target pools that are
+// applied by the managed instance group. This method reduces thetargetSize of the managed instance group by the
+// number of instances that you abandon. This operation is marked asDONE when the action is scheduled even if the instances have
+// not yet been removed from the group. You must separately verify the
+// status of the abandoning action with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *RegionInstanceGroupManagersClient) AbandonInstances(ctx context.Context, req *computepb.AbandonInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.AbandonInstances(ctx, req, opts...)
 }
@@ -189,22 +256,43 @@ func (c *RegionInstanceGroupManagersClient) ApplyUpdatesToInstances(ctx context.
 	return c.internalClient.ApplyUpdatesToInstances(ctx, req, opts...)
 }
 
-// CreateInstances creates instances with per-instance configurations in this regional managed instance group. Instances are created using the current instance template. The create instances operation is marked DONE if the createInstances request is successful. The underlying actions take additional time. You must separately verify the status of the creating or actions with the listmanagedinstances method.
+// CreateInstances creates instances with per-instance configurations in this regional managed
+// instance group. Instances are created using the current instance template.
+// The create instances operation is marked DONE if
+// the createInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of thecreating or actions with the listmanagedinstances
+// method.
 func (c *RegionInstanceGroupManagersClient) CreateInstances(ctx context.Context, req *computepb.CreateInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.CreateInstances(ctx, req, opts...)
 }
 
-// Delete deletes the specified managed instance group and all of the instances in that group.
+// Delete deletes the specified managed instance group and all of the instances
+// in that group.
 func (c *RegionInstanceGroupManagersClient) Delete(ctx context.Context, req *computepb.DeleteRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Delete(ctx, req, opts...)
 }
 
-// DeleteInstances flags the specified instances in the managed instance group to be immediately deleted. The instances are also removed from any target pools of which they were a member. This method reduces the targetSize of the managed instance group by the number of instances that you delete. The deleteInstances operation is marked DONE if the deleteInstances request is successful. The underlying actions take additional time. You must separately verify the status of the deleting action with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// DeleteInstances flags the specified instances in the managed instance group to be
+// immediately deleted. The instances are also removed from any target
+// pools of which they were a member. This method reduces thetargetSize of the managed instance group by the number of
+// instances that you delete.
+// The deleteInstances operation is marked DONE if
+// the deleteInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of thedeleting action with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *RegionInstanceGroupManagersClient) DeleteInstances(ctx context.Context, req *computepb.DeleteInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.DeleteInstances(ctx, req, opts...)
 }
 
-// DeletePerInstanceConfigs deletes selected per-instance configurations for the managed instance group.
+// DeletePerInstanceConfigs deletes selected per-instance configurations for the managed instance
+// group.
 func (c *RegionInstanceGroupManagersClient) DeletePerInstanceConfigs(ctx context.Context, req *computepb.DeletePerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.DeletePerInstanceConfigs(ctx, req, opts...)
 }
@@ -214,62 +302,220 @@ func (c *RegionInstanceGroupManagersClient) Get(ctx context.Context, req *comput
 	return c.internalClient.Get(ctx, req, opts...)
 }
 
-// Insert creates a managed instance group using the information that you specify in the request. After the group is created, instances in the group are created using the specified instance template. This operation is marked as DONE when the group is created even if the instances in the group have not yet been created. You must separately verify the status of the individual instances with the listmanagedinstances method. A regional managed instance group can contain up to 2000 instances.
+// Insert creates a managed instance group using the information that you specify
+// in the request. After the group is created, instances in the group are
+// created using the specified instance template.
+// This operation is marked as DONE when the group is created
+// even if the instances in the group have not yet been created. You must
+// separately verify the status of the individual instances with thelistmanagedinstances
+// method.
+//
+// A regional managed instance group can contain up to 2000 instances.
 func (c *RegionInstanceGroupManagersClient) Insert(ctx context.Context, req *computepb.InsertRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Insert(ctx, req, opts...)
 }
 
-// List retrieves the list of managed instance groups that are contained within the specified region.
+// List retrieves the list of managed instance groups that are contained
+// within the specified region.
 func (c *RegionInstanceGroupManagersClient) List(ctx context.Context, req *computepb.ListRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *InstanceGroupManagerIterator {
 	return c.internalClient.List(ctx, req, opts...)
 }
 
-// ListErrors lists all errors thrown by actions on instances for a given regional managed instance group. The filter and orderBy query parameters are not supported.
+// ListErrors lists all errors thrown by actions on instances for a given regional
+// managed instance group. The filter andorderBy query parameters are not supported.
 func (c *RegionInstanceGroupManagersClient) ListErrors(ctx context.Context, req *computepb.ListErrorsRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *InstanceManagedByIgmErrorIterator {
 	return c.internalClient.ListErrors(ctx, req, opts...)
 }
 
-// ListManagedInstances lists the instances in the managed instance group and instances that are scheduled to be created. The list includes any current actions that the group has scheduled for its instances. The orderBy query parameter is not supported. The pageToken query parameter is supported only in the alpha and beta API and only if the group’s listManagedInstancesResults field is set to PAGINATED.
+// ListManagedInstances lists the instances in the managed instance group and instances that are
+// scheduled to be created. The list includes any current actions
+// that the group has scheduled for its instances. The orderBy
+// query parameter is not supported.   The pageToken query parameter is
+// supported only if the group’s listManagedInstancesResults field is set
+// to PAGINATED.
 func (c *RegionInstanceGroupManagersClient) ListManagedInstances(ctx context.Context, req *computepb.ListManagedInstancesRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *ManagedInstanceIterator {
 	return c.internalClient.ListManagedInstances(ctx, req, opts...)
 }
 
-// ListPerInstanceConfigs lists all of the per-instance configurations defined for the managed instance group. The orderBy query parameter is not supported.
+// ListPerInstanceConfigs lists all of the per-instance configurations defined for the managed
+// instance group. The orderBy query parameter is not supported.
 func (c *RegionInstanceGroupManagersClient) ListPerInstanceConfigs(ctx context.Context, req *computepb.ListPerInstanceConfigsRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *PerInstanceConfigIterator {
 	return c.internalClient.ListPerInstanceConfigs(ctx, req, opts...)
 }
 
-// Patch updates a managed instance group using the information that you specify in the request. This operation is marked as DONE when the group is patched even if the instances in the group are still in the process of being patched. You must separately verify the status of the individual instances with the listmanagedinstances method. This method supports PATCH semantics and uses the JSON merge patch format and processing rules. If you update your group to specify a new template or instance configuration, it’s possible that your intended specification for each VM in the group is different from the current state of that VM. To learn how to apply an updated configuration to the VMs in a MIG, see Updating instances in a MIG.
+// Patch updates a managed instance group using the information that you specify
+// in the request.
+// This operation is marked as DONE when the group is patched
+// even if the instances in the group are still in the process of being
+// patched. You must separately verify the status of the individual instances
+// with the listmanagedinstances
+// method. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
+//
+// If you update your group to specify a new template or instance
+// configuration, it’s possible that your intended specification for each VM
+// in the group is different from the current state of that VM. To learn how
+// to apply an updated configuration to the VMs in a MIG, seeUpdating instances in
+// a MIG.
 func (c *RegionInstanceGroupManagersClient) Patch(ctx context.Context, req *computepb.PatchRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Patch(ctx, req, opts...)
 }
 
-// PatchPerInstanceConfigs inserts or patches per-instance configurations for the managed instance group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to distinguish whether to perform insert or patch.
+// PatchPerInstanceConfigs inserts or patches per-instance configurations for the managed instance
+// group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to
+// distinguish whether to perform insert or patch.
 func (c *RegionInstanceGroupManagersClient) PatchPerInstanceConfigs(ctx context.Context, req *computepb.PatchPerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.PatchPerInstanceConfigs(ctx, req, opts...)
 }
 
-// RecreateInstances flags the specified VM instances in the managed instance group to be immediately recreated. Each instance is recreated using the group’s current configuration. This operation is marked as DONE when the flag is set even if the instances have not yet been recreated. You must separately verify the status of each instance by checking its currentAction field; for more information, see Checking the status of managed instances. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// RecreateInstances flags the specified VM instances in the managed instance group to be
+// immediately recreated. Each instance is recreated using the group’s current
+// configuration. This operation is marked as DONE when the flag
+// is set even if the instances have not yet been recreated. You must
+// separately verify the status of each instance by checking itscurrentAction field; for more information, see Checking
+// the status of managed instances.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *RegionInstanceGroupManagersClient) RecreateInstances(ctx context.Context, req *computepb.RecreateInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.RecreateInstances(ctx, req, opts...)
 }
 
-// Resize changes the intended size of the managed instance group. If you increase the size, the group creates new instances using the current instance template. If you decrease the size, the group deletes one or more instances. The resize operation is marked DONE if the resize request is successful. The underlying actions take additional time. You must separately verify the status of the creating or deleting actions with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted.
+// Resize changes the intended size of the managed instance group. If you increase
+// the size, the group creates new instances using the current instance
+// template. If you decrease the size, the group deletes one or more
+// instances.
+//
+// The resize operation is marked DONE if theresize request is successful. The underlying actions take
+// additional time. You must separately verify the status of thecreating or deleting actions with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
 func (c *RegionInstanceGroupManagersClient) Resize(ctx context.Context, req *computepb.ResizeRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Resize(ctx, req, opts...)
 }
 
-// SetInstanceTemplate sets the instance template to use when creating new instances or recreating instances in this group. Existing instances are not affected.
+// ResumeInstances flags the specified instances in the managed instance group to be
+// resumed. This method increases thetargetSize and decreases the targetSuspendedSize
+// of the managed instance group by the number of instances that you resume.
+// The resumeInstances operation is marked DONE if
+// the resumeInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theRESUMING action with thelistmanagedinstances
+// method.
+//
+// In this request, you can only specify instances that are suspended. For
+// example, if an instance was previously suspended using the suspendInstances
+// method, it can be resumed using the resumeInstances method.
+//
+// If a health check is attached to the managed instance group, the specified
+// instances will be verified as healthy after they are resumed.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *RegionInstanceGroupManagersClient) ResumeInstances(ctx context.Context, req *computepb.ResumeInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.ResumeInstances(ctx, req, opts...)
+}
+
+// SetInstanceTemplate sets the instance template to use when creating new instances or recreating
+// instances in this group. Existing instances are not affected.
 func (c *RegionInstanceGroupManagersClient) SetInstanceTemplate(ctx context.Context, req *computepb.SetInstanceTemplateRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetInstanceTemplate(ctx, req, opts...)
 }
 
-// SetTargetPools modifies the target pools to which all new instances in this group are assigned. Existing instances in the group are not affected.
+// SetTargetPools modifies the target pools to which all new instances in this group are
+// assigned. Existing instances in the group are not affected.
 func (c *RegionInstanceGroupManagersClient) SetTargetPools(ctx context.Context, req *computepb.SetTargetPoolsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetTargetPools(ctx, req, opts...)
 }
 
-// UpdatePerInstanceConfigs inserts or updates per-instance configurations for the managed instance group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to distinguish whether to perform insert or patch.
+// StartInstances flags the specified instances in the managed instance group to be
+// started. This method increases thetargetSize and decreases the targetStoppedSize
+// of the managed instance group by the number of instances that you start.
+// The startInstances operation is marked DONE if
+// the startInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSTARTING action with thelistmanagedinstances
+// method.
+//
+// In this request, you can only specify instances that are stopped. For
+// example, if an instance was previously stopped using the stopInstances
+// method, it can be started using the startInstances method.
+//
+// If a health check is attached to the managed instance group, the specified
+// instances will be verified as healthy after they are started.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *RegionInstanceGroupManagersClient) StartInstances(ctx context.Context, req *computepb.StartInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.StartInstances(ctx, req, opts...)
+}
+
+// StopInstances flags the specified instances in the managed instance group to be
+// immediately stopped. You can only specify instances that are running in
+// this request. This method reduces thetargetSize and increases the targetStoppedSize
+// of the managed instance group by the number of instances that you stop.
+// The stopInstances operation is marked DONE if
+// the stopInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSTOPPING action with thelistmanagedinstances
+// method.
+//
+// If the standbyPolicy.initialDelaySec field is set, the group
+// delays stopping the instances until initialDelaySec have
+// passed from instance.creationTimestamp (that is, when the
+// instance was created). This delay gives your application time to
+// set itself up and initialize on the instance. If more thaninitialDelaySec seconds have passed sinceinstance.creationTimestamp when this method is called, there
+// will be zero delay.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is stopped.
+//
+// Stopped instances can be started using the startInstances
+// method.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *RegionInstanceGroupManagersClient) StopInstances(ctx context.Context, req *computepb.StopInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.StopInstances(ctx, req, opts...)
+}
+
+// SuspendInstances flags the specified instances in the managed instance group to be
+// immediately suspended. You can only specify instances that are running in
+// this request. This method reduces thetargetSize and increases the targetSuspendedSize
+// of the managed instance group by the number of instances that you suspend.
+// The suspendInstances operation is marked DONE if
+// the suspendInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSUSPENDING action with thelistmanagedinstances
+// method.
+//
+// If the standbyPolicy.initialDelaySec field is set, the group
+// delays suspension of the instances until initialDelaySec have
+// passed from instance.creationTimestamp (that is, when the
+// instance was created). This delay gives your application time to
+// set itself up and initialize on the instance. If more thaninitialDelaySec seconds have passed sinceinstance.creationTimestamp when this method is called, there
+// will be zero delay.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is suspended.
+//
+// Suspended instances can be resumed using the resumeInstances
+// method.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *RegionInstanceGroupManagersClient) SuspendInstances(ctx context.Context, req *computepb.SuspendInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	return c.internalClient.SuspendInstances(ctx, req, opts...)
+}
+
+// UpdatePerInstanceConfigs inserts or updates per-instance configurations for the managed instance
+// group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to
+// distinguish whether to perform insert or patch.
 func (c *RegionInstanceGroupManagersClient) UpdatePerInstanceConfigs(ctx context.Context, req *computepb.UpdatePerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.UpdatePerInstanceConfigs(ctx, req, opts...)
 }
@@ -285,11 +531,13 @@ type regionInstanceGroupManagersRESTClient struct {
 	// operationClient is used to call the operation-specific management service.
 	operationClient *RegionOperationsClient
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing RegionInstanceGroupManagersClient
 	CallOptions **RegionInstanceGroupManagersCallOptions
+
+	logger *slog.Logger
 }
 
 // NewRegionInstanceGroupManagersRESTClient creates a new region instance group managers rest client.
@@ -307,6 +555,7 @@ func NewRegionInstanceGroupManagersRESTClient(ctx context.Context, opts ...optio
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -326,9 +575,12 @@ func NewRegionInstanceGroupManagersRESTClient(ctx context.Context, opts ...optio
 func defaultRegionInstanceGroupManagersRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -336,9 +588,11 @@ func defaultRegionInstanceGroupManagersRESTClientOptions() []option.ClientOption
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *regionInstanceGroupManagersRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -359,7 +613,21 @@ func (c *regionInstanceGroupManagersRESTClient) Connection() *grpc.ClientConn {
 	return nil
 }
 
-// AbandonInstances flags the specified instances to be immediately removed from the managed instance group. Abandoning an instance does not delete the instance, but it does remove the instance from any target pools that are applied by the managed instance group. This method reduces the targetSize of the managed instance group by the number of instances that you abandon. This operation is marked as DONE when the action is scheduled even if the instances have not yet been removed from the group. You must separately verify the status of the abandoning action with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// AbandonInstances flags the specified instances to be immediately removed from the managed
+// instance group. Abandoning an instance does not delete the
+// instance, but it does remove the instance from any target pools that are
+// applied by the managed instance group. This method reduces thetargetSize of the managed instance group by the
+// number of instances that you abandon. This operation is marked asDONE when the action is scheduled even if the instances have
+// not yet been removed from the group. You must separately verify the
+// status of the abandoning action with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *regionInstanceGroupManagersRESTClient) AbandonInstances(ctx context.Context, req *computepb.AbandonInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersAbandonInstancesRequestResource()
@@ -382,9 +650,11 @@ func (c *regionInstanceGroupManagersRESTClient) AbandonInstances(ctx context.Con
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AbandonInstances[0:len((*c.CallOptions).AbandonInstances):len((*c.CallOptions).AbandonInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -399,23 +669,13 @@ func (c *regionInstanceGroupManagersRESTClient) AbandonInstances(ctx context.Con
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AbandonInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -450,9 +710,11 @@ func (c *regionInstanceGroupManagersRESTClient) ApplyUpdatesToInstances(ctx cont
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/applyUpdatesToInstances", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).ApplyUpdatesToInstances[0:len((*c.CallOptions).ApplyUpdatesToInstances):len((*c.CallOptions).ApplyUpdatesToInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -467,23 +729,13 @@ func (c *regionInstanceGroupManagersRESTClient) ApplyUpdatesToInstances(ctx cont
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "ApplyUpdatesToInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -502,7 +754,12 @@ func (c *regionInstanceGroupManagersRESTClient) ApplyUpdatesToInstances(ctx cont
 	return op, nil
 }
 
-// CreateInstances creates instances with per-instance configurations in this regional managed instance group. Instances are created using the current instance template. The create instances operation is marked DONE if the createInstances request is successful. The underlying actions take additional time. You must separately verify the status of the creating or actions with the listmanagedinstances method.
+// CreateInstances creates instances with per-instance configurations in this regional managed
+// instance group. Instances are created using the current instance template.
+// The create instances operation is marked DONE if
+// the createInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of thecreating or actions with the listmanagedinstances
+// method.
 func (c *regionInstanceGroupManagersRESTClient) CreateInstances(ctx context.Context, req *computepb.CreateInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersCreateInstancesRequestResource()
@@ -525,9 +782,11 @@ func (c *regionInstanceGroupManagersRESTClient) CreateInstances(ctx context.Cont
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).CreateInstances[0:len((*c.CallOptions).CreateInstances):len((*c.CallOptions).CreateInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -542,23 +801,13 @@ func (c *regionInstanceGroupManagersRESTClient) CreateInstances(ctx context.Cont
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "CreateInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -577,7 +826,8 @@ func (c *regionInstanceGroupManagersRESTClient) CreateInstances(ctx context.Cont
 	return op, nil
 }
 
-// Delete deletes the specified managed instance group and all of the instances in that group.
+// Delete deletes the specified managed instance group and all of the instances
+// in that group.
 func (c *regionInstanceGroupManagersRESTClient) Delete(ctx context.Context, req *computepb.DeleteRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -593,9 +843,11 @@ func (c *regionInstanceGroupManagersRESTClient) Delete(ctx context.Context, req 
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Delete[0:len((*c.CallOptions).Delete):len((*c.CallOptions).Delete)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -610,23 +862,13 @@ func (c *regionInstanceGroupManagersRESTClient) Delete(ctx context.Context, req 
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Delete")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -645,7 +887,21 @@ func (c *regionInstanceGroupManagersRESTClient) Delete(ctx context.Context, req 
 	return op, nil
 }
 
-// DeleteInstances flags the specified instances in the managed instance group to be immediately deleted. The instances are also removed from any target pools of which they were a member. This method reduces the targetSize of the managed instance group by the number of instances that you delete. The deleteInstances operation is marked DONE if the deleteInstances request is successful. The underlying actions take additional time. You must separately verify the status of the deleting action with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// DeleteInstances flags the specified instances in the managed instance group to be
+// immediately deleted. The instances are also removed from any target
+// pools of which they were a member. This method reduces thetargetSize of the managed instance group by the number of
+// instances that you delete.
+// The deleteInstances operation is marked DONE if
+// the deleteInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of thedeleting action with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *regionInstanceGroupManagersRESTClient) DeleteInstances(ctx context.Context, req *computepb.DeleteInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersDeleteInstancesRequestResource()
@@ -668,9 +924,11 @@ func (c *regionInstanceGroupManagersRESTClient) DeleteInstances(ctx context.Cont
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).DeleteInstances[0:len((*c.CallOptions).DeleteInstances):len((*c.CallOptions).DeleteInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -685,23 +943,13 @@ func (c *regionInstanceGroupManagersRESTClient) DeleteInstances(ctx context.Cont
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "DeleteInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -720,7 +968,8 @@ func (c *regionInstanceGroupManagersRESTClient) DeleteInstances(ctx context.Cont
 	return op, nil
 }
 
-// DeletePerInstanceConfigs deletes selected per-instance configurations for the managed instance group.
+// DeletePerInstanceConfigs deletes selected per-instance configurations for the managed instance
+// group.
 func (c *regionInstanceGroupManagersRESTClient) DeletePerInstanceConfigs(ctx context.Context, req *computepb.DeletePerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagerDeleteInstanceConfigReqResource()
@@ -736,9 +985,11 @@ func (c *regionInstanceGroupManagersRESTClient) DeletePerInstanceConfigs(ctx con
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/deletePerInstanceConfigs", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).DeletePerInstanceConfigs[0:len((*c.CallOptions).DeletePerInstanceConfigs):len((*c.CallOptions).DeletePerInstanceConfigs)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -753,23 +1004,13 @@ func (c *regionInstanceGroupManagersRESTClient) DeletePerInstanceConfigs(ctx con
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "DeletePerInstanceConfigs")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -797,9 +1038,11 @@ func (c *regionInstanceGroupManagersRESTClient) Get(ctx context.Context, req *co
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.InstanceGroupManager{}
@@ -814,23 +1057,13 @@ func (c *regionInstanceGroupManagersRESTClient) Get(ctx context.Context, req *co
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -841,7 +1074,15 @@ func (c *regionInstanceGroupManagersRESTClient) Get(ctx context.Context, req *co
 	return resp, nil
 }
 
-// Insert creates a managed instance group using the information that you specify in the request. After the group is created, instances in the group are created using the specified instance template. This operation is marked as DONE when the group is created even if the instances in the group have not yet been created. You must separately verify the status of the individual instances with the listmanagedinstances method. A regional managed instance group can contain up to 2000 instances.
+// Insert creates a managed instance group using the information that you specify
+// in the request. After the group is created, instances in the group are
+// created using the specified instance template.
+// This operation is marked as DONE when the group is created
+// even if the instances in the group have not yet been created. You must
+// separately verify the status of the individual instances with thelistmanagedinstances
+// method.
+//
+// A regional managed instance group can contain up to 2000 instances.
 func (c *regionInstanceGroupManagersRESTClient) Insert(ctx context.Context, req *computepb.InsertRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceGroupManagerResource()
@@ -864,9 +1105,11 @@ func (c *regionInstanceGroupManagersRESTClient) Insert(ctx context.Context, req 
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Insert[0:len((*c.CallOptions).Insert):len((*c.CallOptions).Insert)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -881,23 +1124,13 @@ func (c *regionInstanceGroupManagersRESTClient) Insert(ctx context.Context, req 
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Insert")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -916,7 +1149,8 @@ func (c *regionInstanceGroupManagersRESTClient) Insert(ctx context.Context, req 
 	return op, nil
 }
 
-// List retrieves the list of managed instance groups that are contained within the specified region.
+// List retrieves the list of managed instance groups that are contained
+// within the specified region.
 func (c *regionInstanceGroupManagersRESTClient) List(ctx context.Context, req *computepb.ListRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *InstanceGroupManagerIterator {
 	it := &InstanceGroupManagerIterator{}
 	req = proto.Clone(req).(*computepb.ListRegionInstanceGroupManagersRequest)
@@ -927,7 +1161,7 @@ func (c *regionInstanceGroupManagersRESTClient) List(ctx context.Context, req *c
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -957,7 +1191,8 @@ func (c *regionInstanceGroupManagersRESTClient) List(ctx context.Context, req *c
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -968,23 +1203,12 @@ func (c *regionInstanceGroupManagersRESTClient) List(ctx context.Context, req *c
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "List")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1012,7 +1236,8 @@ func (c *regionInstanceGroupManagersRESTClient) List(ctx context.Context, req *c
 	return it
 }
 
-// ListErrors lists all errors thrown by actions on instances for a given regional managed instance group. The filter and orderBy query parameters are not supported.
+// ListErrors lists all errors thrown by actions on instances for a given regional
+// managed instance group. The filter andorderBy query parameters are not supported.
 func (c *regionInstanceGroupManagersRESTClient) ListErrors(ctx context.Context, req *computepb.ListErrorsRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *InstanceManagedByIgmErrorIterator {
 	it := &InstanceManagedByIgmErrorIterator{}
 	req = proto.Clone(req).(*computepb.ListErrorsRegionInstanceGroupManagersRequest)
@@ -1023,7 +1248,7 @@ func (c *regionInstanceGroupManagersRESTClient) ListErrors(ctx context.Context, 
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -1053,7 +1278,8 @@ func (c *regionInstanceGroupManagersRESTClient) ListErrors(ctx context.Context, 
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -1064,23 +1290,12 @@ func (c *regionInstanceGroupManagersRESTClient) ListErrors(ctx context.Context, 
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "ListErrors")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1108,7 +1323,12 @@ func (c *regionInstanceGroupManagersRESTClient) ListErrors(ctx context.Context, 
 	return it
 }
 
-// ListManagedInstances lists the instances in the managed instance group and instances that are scheduled to be created. The list includes any current actions that the group has scheduled for its instances. The orderBy query parameter is not supported. The pageToken query parameter is supported only in the alpha and beta API and only if the group’s listManagedInstancesResults field is set to PAGINATED.
+// ListManagedInstances lists the instances in the managed instance group and instances that are
+// scheduled to be created. The list includes any current actions
+// that the group has scheduled for its instances. The orderBy
+// query parameter is not supported.   The pageToken query parameter is
+// supported only if the group’s listManagedInstancesResults field is set
+// to PAGINATED.
 func (c *regionInstanceGroupManagersRESTClient) ListManagedInstances(ctx context.Context, req *computepb.ListManagedInstancesRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *ManagedInstanceIterator {
 	it := &ManagedInstanceIterator{}
 	req = proto.Clone(req).(*computepb.ListManagedInstancesRegionInstanceGroupManagersRequest)
@@ -1119,7 +1339,7 @@ func (c *regionInstanceGroupManagersRESTClient) ListManagedInstances(ctx context
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -1149,7 +1369,8 @@ func (c *regionInstanceGroupManagersRESTClient) ListManagedInstances(ctx context
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -1160,23 +1381,12 @@ func (c *regionInstanceGroupManagersRESTClient) ListManagedInstances(ctx context
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "ListManagedInstances")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1204,7 +1414,8 @@ func (c *regionInstanceGroupManagersRESTClient) ListManagedInstances(ctx context
 	return it
 }
 
-// ListPerInstanceConfigs lists all of the per-instance configurations defined for the managed instance group. The orderBy query parameter is not supported.
+// ListPerInstanceConfigs lists all of the per-instance configurations defined for the managed
+// instance group. The orderBy query parameter is not supported.
 func (c *regionInstanceGroupManagersRESTClient) ListPerInstanceConfigs(ctx context.Context, req *computepb.ListPerInstanceConfigsRegionInstanceGroupManagersRequest, opts ...gax.CallOption) *PerInstanceConfigIterator {
 	it := &PerInstanceConfigIterator{}
 	req = proto.Clone(req).(*computepb.ListPerInstanceConfigsRegionInstanceGroupManagersRequest)
@@ -1215,7 +1426,7 @@ func (c *regionInstanceGroupManagersRESTClient) ListPerInstanceConfigs(ctx conte
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -1245,7 +1456,8 @@ func (c *regionInstanceGroupManagersRESTClient) ListPerInstanceConfigs(ctx conte
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -1256,23 +1468,12 @@ func (c *regionInstanceGroupManagersRESTClient) ListPerInstanceConfigs(ctx conte
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "ListPerInstanceConfigs")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -1300,7 +1501,21 @@ func (c *regionInstanceGroupManagersRESTClient) ListPerInstanceConfigs(ctx conte
 	return it
 }
 
-// Patch updates a managed instance group using the information that you specify in the request. This operation is marked as DONE when the group is patched even if the instances in the group are still in the process of being patched. You must separately verify the status of the individual instances with the listmanagedinstances method. This method supports PATCH semantics and uses the JSON merge patch format and processing rules. If you update your group to specify a new template or instance configuration, it’s possible that your intended specification for each VM in the group is different from the current state of that VM. To learn how to apply an updated configuration to the VMs in a MIG, see Updating instances in a MIG.
+// Patch updates a managed instance group using the information that you specify
+// in the request.
+// This operation is marked as DONE when the group is patched
+// even if the instances in the group are still in the process of being
+// patched. You must separately verify the status of the individual instances
+// with the listmanagedinstances
+// method. This method supportsPATCH
+// semantics and uses theJSON merge
+// patch format and processing rules.
+//
+// If you update your group to specify a new template or instance
+// configuration, it’s possible that your intended specification for each VM
+// in the group is different from the current state of that VM. To learn how
+// to apply an updated configuration to the VMs in a MIG, seeUpdating instances in
+// a MIG.
 func (c *regionInstanceGroupManagersRESTClient) Patch(ctx context.Context, req *computepb.PatchRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetInstanceGroupManagerResource()
@@ -1323,9 +1538,11 @@ func (c *regionInstanceGroupManagersRESTClient) Patch(ctx context.Context, req *
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Patch[0:len((*c.CallOptions).Patch):len((*c.CallOptions).Patch)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1340,23 +1557,13 @@ func (c *regionInstanceGroupManagersRESTClient) Patch(ctx context.Context, req *
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Patch")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1375,7 +1582,9 @@ func (c *regionInstanceGroupManagersRESTClient) Patch(ctx context.Context, req *
 	return op, nil
 }
 
-// PatchPerInstanceConfigs inserts or patches per-instance configurations for the managed instance group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to distinguish whether to perform insert or patch.
+// PatchPerInstanceConfigs inserts or patches per-instance configurations for the managed instance
+// group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to
+// distinguish whether to perform insert or patch.
 func (c *regionInstanceGroupManagersRESTClient) PatchPerInstanceConfigs(ctx context.Context, req *computepb.PatchPerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagerPatchInstanceConfigReqResource()
@@ -1398,9 +1607,11 @@ func (c *regionInstanceGroupManagersRESTClient) PatchPerInstanceConfigs(ctx cont
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).PatchPerInstanceConfigs[0:len((*c.CallOptions).PatchPerInstanceConfigs):len((*c.CallOptions).PatchPerInstanceConfigs)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1415,23 +1626,13 @@ func (c *regionInstanceGroupManagersRESTClient) PatchPerInstanceConfigs(ctx cont
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "PatchPerInstanceConfigs")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1450,7 +1651,19 @@ func (c *regionInstanceGroupManagersRESTClient) PatchPerInstanceConfigs(ctx cont
 	return op, nil
 }
 
-// RecreateInstances flags the specified VM instances in the managed instance group to be immediately recreated. Each instance is recreated using the group’s current configuration. This operation is marked as DONE when the flag is set even if the instances have not yet been recreated. You must separately verify the status of each instance by checking its currentAction field; for more information, see Checking the status of managed instances. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted. You can specify a maximum of 1000 instances with this method per request.
+// RecreateInstances flags the specified VM instances in the managed instance group to be
+// immediately recreated. Each instance is recreated using the group’s current
+// configuration. This operation is marked as DONE when the flag
+// is set even if the instances have not yet been recreated. You must
+// separately verify the status of each instance by checking itscurrentAction field; for more information, see Checking
+// the status of managed instances.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
+//
+// You can specify a maximum of 1000 instances with this method per request.
 func (c *regionInstanceGroupManagersRESTClient) RecreateInstances(ctx context.Context, req *computepb.RecreateInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersRecreateRequestResource()
@@ -1473,9 +1686,11 @@ func (c *regionInstanceGroupManagersRESTClient) RecreateInstances(ctx context.Co
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).RecreateInstances[0:len((*c.CallOptions).RecreateInstances):len((*c.CallOptions).RecreateInstances)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1490,23 +1705,13 @@ func (c *regionInstanceGroupManagersRESTClient) RecreateInstances(ctx context.Co
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "RecreateInstances")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1525,7 +1730,19 @@ func (c *regionInstanceGroupManagersRESTClient) RecreateInstances(ctx context.Co
 	return op, nil
 }
 
-// Resize changes the intended size of the managed instance group. If you increase the size, the group creates new instances using the current instance template. If you decrease the size, the group deletes one or more instances. The resize operation is marked DONE if the resize request is successful. The underlying actions take additional time. You must separately verify the status of the creating or deleting actions with the listmanagedinstances method. If the group is part of a backend service that has enabled connection draining, it can take up to 60 seconds after the connection draining duration has elapsed before the VM instance is removed or deleted.
+// Resize changes the intended size of the managed instance group. If you increase
+// the size, the group creates new instances using the current instance
+// template. If you decrease the size, the group deletes one or more
+// instances.
+//
+// The resize operation is marked DONE if theresize request is successful. The underlying actions take
+// additional time. You must separately verify the status of thecreating or deleting actions with thelistmanagedinstances
+// method.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is removed or deleted.
 func (c *regionInstanceGroupManagersRESTClient) Resize(ctx context.Context, req *computepb.ResizeRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -1542,9 +1759,11 @@ func (c *regionInstanceGroupManagersRESTClient) Resize(ctx context.Context, req 
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Resize[0:len((*c.CallOptions).Resize):len((*c.CallOptions).Resize)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1559,23 +1778,13 @@ func (c *regionInstanceGroupManagersRESTClient) Resize(ctx context.Context, req 
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Resize")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1594,7 +1803,90 @@ func (c *regionInstanceGroupManagersRESTClient) Resize(ctx context.Context, req 
 	return op, nil
 }
 
-// SetInstanceTemplate sets the instance template to use when creating new instances or recreating instances in this group. Existing instances are not affected.
+// ResumeInstances flags the specified instances in the managed instance group to be
+// resumed. This method increases thetargetSize and decreases the targetSuspendedSize
+// of the managed instance group by the number of instances that you resume.
+// The resumeInstances operation is marked DONE if
+// the resumeInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theRESUMING action with thelistmanagedinstances
+// method.
+//
+// In this request, you can only specify instances that are suspended. For
+// example, if an instance was previously suspended using the suspendInstances
+// method, it can be resumed using the resumeInstances method.
+//
+// If a health check is attached to the managed instance group, the specified
+// instances will be verified as healthy after they are resumed.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *regionInstanceGroupManagersRESTClient) ResumeInstances(ctx context.Context, req *computepb.ResumeInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetRegionInstanceGroupManagersResumeInstancesRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/resumeInstances", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).ResumeInstances[0:len((*c.CallOptions).ResumeInstances):len((*c.CallOptions).ResumeInstances)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "ResumeInstances")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&regionOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			region:  req.GetRegion(),
+		},
+	}
+	return op, nil
+}
+
+// SetInstanceTemplate sets the instance template to use when creating new instances or recreating
+// instances in this group. Existing instances are not affected.
 func (c *regionInstanceGroupManagersRESTClient) SetInstanceTemplate(ctx context.Context, req *computepb.SetInstanceTemplateRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersSetTemplateRequestResource()
@@ -1617,9 +1909,11 @@ func (c *regionInstanceGroupManagersRESTClient) SetInstanceTemplate(ctx context.
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetInstanceTemplate[0:len((*c.CallOptions).SetInstanceTemplate):len((*c.CallOptions).SetInstanceTemplate)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1634,23 +1928,13 @@ func (c *regionInstanceGroupManagersRESTClient) SetInstanceTemplate(ctx context.
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetInstanceTemplate")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1669,7 +1953,8 @@ func (c *regionInstanceGroupManagersRESTClient) SetInstanceTemplate(ctx context.
 	return op, nil
 }
 
-// SetTargetPools modifies the target pools to which all new instances in this group are assigned. Existing instances in the group are not affected.
+// SetTargetPools modifies the target pools to which all new instances in this group are
+// assigned. Existing instances in the group are not affected.
 func (c *regionInstanceGroupManagersRESTClient) SetTargetPools(ctx context.Context, req *computepb.SetTargetPoolsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagersSetTargetPoolsRequestResource()
@@ -1692,9 +1977,11 @@ func (c *regionInstanceGroupManagersRESTClient) SetTargetPools(ctx context.Conte
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetTargetPools[0:len((*c.CallOptions).SetTargetPools):len((*c.CallOptions).SetTargetPools)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1709,23 +1996,13 @@ func (c *regionInstanceGroupManagersRESTClient) SetTargetPools(ctx context.Conte
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetTargetPools")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1744,7 +2021,273 @@ func (c *regionInstanceGroupManagersRESTClient) SetTargetPools(ctx context.Conte
 	return op, nil
 }
 
-// UpdatePerInstanceConfigs inserts or updates per-instance configurations for the managed instance group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to distinguish whether to perform insert or patch.
+// StartInstances flags the specified instances in the managed instance group to be
+// started. This method increases thetargetSize and decreases the targetStoppedSize
+// of the managed instance group by the number of instances that you start.
+// The startInstances operation is marked DONE if
+// the startInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSTARTING action with thelistmanagedinstances
+// method.
+//
+// In this request, you can only specify instances that are stopped. For
+// example, if an instance was previously stopped using the stopInstances
+// method, it can be started using the startInstances method.
+//
+// If a health check is attached to the managed instance group, the specified
+// instances will be verified as healthy after they are started.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *regionInstanceGroupManagersRESTClient) StartInstances(ctx context.Context, req *computepb.StartInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetRegionInstanceGroupManagersStartInstancesRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/startInstances", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).StartInstances[0:len((*c.CallOptions).StartInstances):len((*c.CallOptions).StartInstances)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "StartInstances")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&regionOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			region:  req.GetRegion(),
+		},
+	}
+	return op, nil
+}
+
+// StopInstances flags the specified instances in the managed instance group to be
+// immediately stopped. You can only specify instances that are running in
+// this request. This method reduces thetargetSize and increases the targetStoppedSize
+// of the managed instance group by the number of instances that you stop.
+// The stopInstances operation is marked DONE if
+// the stopInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSTOPPING action with thelistmanagedinstances
+// method.
+//
+// If the standbyPolicy.initialDelaySec field is set, the group
+// delays stopping the instances until initialDelaySec have
+// passed from instance.creationTimestamp (that is, when the
+// instance was created). This delay gives your application time to
+// set itself up and initialize on the instance. If more thaninitialDelaySec seconds have passed sinceinstance.creationTimestamp when this method is called, there
+// will be zero delay.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is stopped.
+//
+// Stopped instances can be started using the startInstances
+// method.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *regionInstanceGroupManagersRESTClient) StopInstances(ctx context.Context, req *computepb.StopInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetRegionInstanceGroupManagersStopInstancesRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/stopInstances", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).StopInstances[0:len((*c.CallOptions).StopInstances):len((*c.CallOptions).StopInstances)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "StopInstances")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&regionOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			region:  req.GetRegion(),
+		},
+	}
+	return op, nil
+}
+
+// SuspendInstances flags the specified instances in the managed instance group to be
+// immediately suspended. You can only specify instances that are running in
+// this request. This method reduces thetargetSize and increases the targetSuspendedSize
+// of the managed instance group by the number of instances that you suspend.
+// The suspendInstances operation is marked DONE if
+// the suspendInstances request is successful. The underlying
+// actions take additional time. You must separately verify the status of theSUSPENDING action with thelistmanagedinstances
+// method.
+//
+// If the standbyPolicy.initialDelaySec field is set, the group
+// delays suspension of the instances until initialDelaySec have
+// passed from instance.creationTimestamp (that is, when the
+// instance was created). This delay gives your application time to
+// set itself up and initialize on the instance. If more thaninitialDelaySec seconds have passed sinceinstance.creationTimestamp when this method is called, there
+// will be zero delay.
+//
+// If the group is part of a backend
+// service that has enabled
+// connection draining, it can take up to 60 seconds after the connection
+// draining duration has elapsed before the VM instance is suspended.
+//
+// Suspended instances can be resumed using the resumeInstances
+// method.
+//
+// You can specify a maximum of 1000 instances with this method per request.
+func (c *regionInstanceGroupManagersRESTClient) SuspendInstances(ctx context.Context, req *computepb.SuspendInstancesRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
+	m := protojson.MarshalOptions{AllowPartial: true}
+	body := req.GetRegionInstanceGroupManagersSuspendInstancesRequestResource()
+	jsonReq, err := m.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	baseUrl, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
+	}
+	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/regions/%v/instanceGroupManagers/%v/suspendInstances", req.GetProject(), req.GetRegion(), req.GetInstanceGroupManager())
+
+	params := url.Values{}
+	if req != nil && req.RequestId != nil {
+		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
+	}
+
+	baseUrl.RawQuery = params.Encode()
+
+	// Build HTTP headers from client and context metadata.
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
+
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
+	opts = append((*c.CallOptions).SuspendInstances[0:len((*c.CallOptions).SuspendInstances):len((*c.CallOptions).SuspendInstances)], opts...)
+	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
+	resp := &computepb.Operation{}
+	e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
+		if settings.Path != "" {
+			baseUrl.Path = settings.Path
+		}
+		httpReq, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(jsonReq))
+		if err != nil {
+			return err
+		}
+		httpReq = httpReq.WithContext(ctx)
+		httpReq.Header = headers
+
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SuspendInstances")
+		if err != nil {
+			return err
+		}
+
+		if err := unm.Unmarshal(buf, resp); err != nil {
+			return err
+		}
+
+		return nil
+	}, opts...)
+	if e != nil {
+		return nil, e
+	}
+	op := &Operation{
+		&regionOperationsHandle{
+			c:       c.operationClient,
+			proto:   resp,
+			project: req.GetProject(),
+			region:  req.GetRegion(),
+		},
+	}
+	return op, nil
+}
+
+// UpdatePerInstanceConfigs inserts or updates per-instance configurations for the managed instance
+// group. perInstanceConfig.name (at http://perInstanceConfig.name) serves as a key used to
+// distinguish whether to perform insert or patch.
 func (c *regionInstanceGroupManagersRESTClient) UpdatePerInstanceConfigs(ctx context.Context, req *computepb.UpdatePerInstanceConfigsRegionInstanceGroupManagerRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetRegionInstanceGroupManagerUpdateInstanceConfigReqResource()
@@ -1767,9 +2310,11 @@ func (c *regionInstanceGroupManagersRESTClient) UpdatePerInstanceConfigs(ctx con
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "region", url.QueryEscape(req.GetRegion()), "instance_group_manager", url.QueryEscape(req.GetInstanceGroupManager()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).UpdatePerInstanceConfigs[0:len((*c.CallOptions).UpdatePerInstanceConfigs):len((*c.CallOptions).UpdatePerInstanceConfigs)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1784,23 +2329,13 @@ func (c *regionInstanceGroupManagersRESTClient) UpdatePerInstanceConfigs(ctx con
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "UpdatePerInstanceConfigs")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil

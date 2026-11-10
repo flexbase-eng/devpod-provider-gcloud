@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package compute
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -28,13 +28,11 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -51,6 +49,7 @@ type AcceleratorTypesCallOptions struct {
 func defaultAcceleratorTypesRESTCallOptions() *AcceleratorTypesCallOptions {
 	return &AcceleratorTypesCallOptions{
 		AggregatedList: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -62,6 +61,7 @@ func defaultAcceleratorTypesRESTCallOptions() *AcceleratorTypesCallOptions {
 			}),
 		},
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -73,6 +73,7 @@ func defaultAcceleratorTypesRESTCallOptions() *AcceleratorTypesCallOptions {
 			}),
 		},
 		List: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -134,6 +135,9 @@ func (c *AcceleratorTypesClient) Connection() *grpc.ClientConn {
 }
 
 // AggregatedList retrieves an aggregated list of accelerator types.
+//
+// To prevent failure, it is recommended that you set the
+// returnPartialSuccess parameter to true.
 func (c *AcceleratorTypesClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListAcceleratorTypesRequest, opts ...gax.CallOption) *AcceleratorTypesScopedListPairIterator {
 	return c.internalClient.AggregatedList(ctx, req, opts...)
 }
@@ -143,7 +147,8 @@ func (c *AcceleratorTypesClient) Get(ctx context.Context, req *computepb.GetAcce
 	return c.internalClient.Get(ctx, req, opts...)
 }
 
-// List retrieves a list of accelerator types that are available to the specified project.
+// List retrieves a list of accelerator types that are available to the specified
+// project.
 func (c *AcceleratorTypesClient) List(ctx context.Context, req *computepb.ListAcceleratorTypesRequest, opts ...gax.CallOption) *AcceleratorTypeIterator {
 	return c.internalClient.List(ctx, req, opts...)
 }
@@ -156,11 +161,13 @@ type acceleratorTypesRESTClient struct {
 	// The http client.
 	httpClient *http.Client
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing AcceleratorTypesClient
 	CallOptions **AcceleratorTypesCallOptions
+
+	logger *slog.Logger
 }
 
 // NewAcceleratorTypesRESTClient creates a new accelerator types rest client.
@@ -180,6 +187,7 @@ func NewAcceleratorTypesRESTClient(ctx context.Context, opts ...option.ClientOpt
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -189,9 +197,12 @@ func NewAcceleratorTypesRESTClient(ctx context.Context, opts ...option.ClientOpt
 func defaultAcceleratorTypesRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -199,9 +210,11 @@ func defaultAcceleratorTypesRESTClientOptions() []option.ClientOption {
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *acceleratorTypesRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -220,6 +233,9 @@ func (c *acceleratorTypesRESTClient) Connection() *grpc.ClientConn {
 }
 
 // AggregatedList retrieves an aggregated list of accelerator types.
+//
+// To prevent failure, it is recommended that you set the
+// returnPartialSuccess parameter to true.
 func (c *acceleratorTypesRESTClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListAcceleratorTypesRequest, opts ...gax.CallOption) *AcceleratorTypesScopedListPairIterator {
 	it := &AcceleratorTypesScopedListPairIterator{}
 	req = proto.Clone(req).(*computepb.AggregatedListAcceleratorTypesRequest)
@@ -230,7 +246,7 @@ func (c *acceleratorTypesRESTClient) AggregatedList(ctx context.Context, req *co
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -259,11 +275,15 @@ func (c *acceleratorTypesRESTClient) AggregatedList(ctx context.Context, req *co
 		if req != nil && req.ReturnPartialSuccess != nil {
 			params.Add("returnPartialSuccess", fmt.Sprintf("%v", req.GetReturnPartialSuccess()))
 		}
+		if req != nil && req.ServiceProjectNumber != nil {
+			params.Add("serviceProjectNumber", fmt.Sprintf("%v", req.GetServiceProjectNumber()))
+		}
 
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -274,23 +294,12 @@ func (c *acceleratorTypesRESTClient) AggregatedList(ctx context.Context, req *co
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "AggregatedList")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -334,9 +343,11 @@ func (c *acceleratorTypesRESTClient) Get(ctx context.Context, req *computepb.Get
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/zones/%v/acceleratorTypes/%v", req.GetProject(), req.GetZone(), req.GetAcceleratorType())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "accelerator_type", url.QueryEscape(req.GetAcceleratorType())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "zone", url.QueryEscape(req.GetZone()), "accelerator_type", url.QueryEscape(req.GetAcceleratorType()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.AcceleratorType{}
@@ -351,23 +362,13 @@ func (c *acceleratorTypesRESTClient) Get(ctx context.Context, req *computepb.Get
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -378,7 +379,8 @@ func (c *acceleratorTypesRESTClient) Get(ctx context.Context, req *computepb.Get
 	return resp, nil
 }
 
-// List retrieves a list of accelerator types that are available to the specified project.
+// List retrieves a list of accelerator types that are available to the specified
+// project.
 func (c *acceleratorTypesRESTClient) List(ctx context.Context, req *computepb.ListAcceleratorTypesRequest, opts ...gax.CallOption) *AcceleratorTypeIterator {
 	it := &AcceleratorTypeIterator{}
 	req = proto.Clone(req).(*computepb.ListAcceleratorTypesRequest)
@@ -389,7 +391,7 @@ func (c *acceleratorTypesRESTClient) List(ctx context.Context, req *computepb.Li
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -419,7 +421,8 @@ func (c *acceleratorTypesRESTClient) List(ctx context.Context, req *computepb.Li
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -430,23 +433,12 @@ func (c *acceleratorTypesRESTClient) List(ctx context.Context, req *computepb.Li
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "List")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -472,104 +464,4 @@ func (c *acceleratorTypesRESTClient) List(ctx context.Context, req *computepb.Li
 	it.pageInfo.Token = req.GetPageToken()
 
 	return it
-}
-
-// AcceleratorTypeIterator manages a stream of *computepb.AcceleratorType.
-type AcceleratorTypeIterator struct {
-	items    []*computepb.AcceleratorType
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []*computepb.AcceleratorType, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *AcceleratorTypeIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *AcceleratorTypeIterator) Next() (*computepb.AcceleratorType, error) {
-	var item *computepb.AcceleratorType
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *AcceleratorTypeIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *AcceleratorTypeIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
-}
-
-// AcceleratorTypesScopedListPair is a holder type for string/*computepb.AcceleratorTypesScopedList map entries
-type AcceleratorTypesScopedListPair struct {
-	Key   string
-	Value *computepb.AcceleratorTypesScopedList
-}
-
-// AcceleratorTypesScopedListPairIterator manages a stream of AcceleratorTypesScopedListPair.
-type AcceleratorTypesScopedListPairIterator struct {
-	items    []AcceleratorTypesScopedListPair
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []AcceleratorTypesScopedListPair, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *AcceleratorTypesScopedListPairIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *AcceleratorTypesScopedListPairIterator) Next() (AcceleratorTypesScopedListPair, error) {
-	var item AcceleratorTypesScopedListPair
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *AcceleratorTypesScopedListPairIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *AcceleratorTypesScopedListPairIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
 }

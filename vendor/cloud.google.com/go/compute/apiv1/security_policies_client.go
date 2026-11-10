@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -29,13 +29,11 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	gax "github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/api/option/internaloption"
 	httptransport "google.golang.org/api/transport/http"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -60,8 +58,11 @@ type SecurityPoliciesCallOptions struct {
 
 func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 	return &SecurityPoliciesCallOptions{
-		AddRule: []gax.CallOption{},
+		AddRule: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		AggregatedList: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -72,8 +73,11 @@ func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Delete: []gax.CallOption{},
+		Delete: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		Get: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -85,6 +89,7 @@ func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 			}),
 		},
 		GetRule: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -95,8 +100,11 @@ func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Insert: []gax.CallOption{},
+		Insert: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 		List: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -108,6 +116,7 @@ func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 			}),
 		},
 		ListPreconfiguredExpressionSets: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
 			gax.WithRetry(func() gax.Retryer {
 				return gax.OnHTTPCodes(gax.Backoff{
 					Initial:    100 * time.Millisecond,
@@ -118,10 +127,18 @@ func defaultSecurityPoliciesRESTCallOptions() *SecurityPoliciesCallOptions {
 					http.StatusServiceUnavailable)
 			}),
 		},
-		Patch:      []gax.CallOption{},
-		PatchRule:  []gax.CallOption{},
-		RemoveRule: []gax.CallOption{},
-		SetLabels:  []gax.CallOption{},
+		Patch: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		PatchRule: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		RemoveRule: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
+		SetLabels: []gax.CallOption{
+			gax.WithTimeout(600000 * time.Millisecond),
+		},
 	}
 }
 
@@ -184,7 +201,11 @@ func (c *SecurityPoliciesClient) AddRule(ctx context.Context, req *computepb.Add
 	return c.internalClient.AddRule(ctx, req, opts...)
 }
 
-// AggregatedList retrieves the list of all SecurityPolicy resources, regional and global, available to the specified project.
+// AggregatedList retrieves the list of all SecurityPolicy resources, regional and global,
+// available to the specified project.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *SecurityPoliciesClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListSecurityPoliciesRequest, opts ...gax.CallOption) *SecurityPoliciesScopedListPairIterator {
 	return c.internalClient.AggregatedList(ctx, req, opts...)
 }
@@ -204,7 +225,8 @@ func (c *SecurityPoliciesClient) GetRule(ctx context.Context, req *computepb.Get
 	return c.internalClient.GetRule(ctx, req, opts...)
 }
 
-// Insert creates a new policy in the specified project using the data included in the request.
+// Insert creates a new policy in the specified project using the data included in
+// the request.
 func (c *SecurityPoliciesClient) Insert(ctx context.Context, req *computepb.InsertSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Insert(ctx, req, opts...)
 }
@@ -214,17 +236,23 @@ func (c *SecurityPoliciesClient) List(ctx context.Context, req *computepb.ListSe
 	return c.internalClient.List(ctx, req, opts...)
 }
 
-// ListPreconfiguredExpressionSets gets the current list of preconfigured Web Application Firewall (WAF) expressions.
+// ListPreconfiguredExpressionSets gets the current list of preconfigured Web Application Firewall (WAF)
+// expressions.
 func (c *SecurityPoliciesClient) ListPreconfiguredExpressionSets(ctx context.Context, req *computepb.ListPreconfiguredExpressionSetsSecurityPoliciesRequest, opts ...gax.CallOption) (*computepb.SecurityPoliciesListPreconfiguredExpressionSetsResponse, error) {
 	return c.internalClient.ListPreconfiguredExpressionSets(ctx, req, opts...)
 }
 
-// Patch patches the specified policy with the data included in the request. To clear fields in the rule, leave the fields empty and specify them in the updateMask. This cannot be used to be update the rules in the policy. Please use the per rule methods like addRule, patchRule, and removeRule instead.
+// Patch patches the specified policy with the data included in the request. To
+// clear fields in the policy, leave the fields empty and specify them in the
+// updateMask. This cannot be used to be update the rules in the policy.
+// Please use the per rule methods like addRule, patchRule, and removeRule
+// instead.
 func (c *SecurityPoliciesClient) Patch(ctx context.Context, req *computepb.PatchSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.Patch(ctx, req, opts...)
 }
 
-// PatchRule patches a rule at the specified priority.
+// PatchRule patches a rule at the specified priority. To clear fields in the rule,
+// leave the fields empty and specify them in the updateMask.
 func (c *SecurityPoliciesClient) PatchRule(ctx context.Context, req *computepb.PatchRuleSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.PatchRule(ctx, req, opts...)
 }
@@ -234,7 +262,9 @@ func (c *SecurityPoliciesClient) RemoveRule(ctx context.Context, req *computepb.
 	return c.internalClient.RemoveRule(ctx, req, opts...)
 }
 
-// SetLabels sets the labels on a security policy. To learn more about labels, read the Labeling Resources documentation.
+// SetLabels sets the labels on a security policy. To learn more about labels,
+// read the Labeling Resources
+// documentation.
 func (c *SecurityPoliciesClient) SetLabels(ctx context.Context, req *computepb.SetLabelsSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	return c.internalClient.SetLabels(ctx, req, opts...)
 }
@@ -250,11 +280,13 @@ type securityPoliciesRESTClient struct {
 	// operationClient is used to call the operation-specific management service.
 	operationClient *GlobalOperationsClient
 
-	// The x-goog-* metadata to be sent with each request.
-	xGoogMetadata metadata.MD
+	// The x-goog-* headers to be sent with each request.
+	xGoogHeaders []string
 
 	// Points back to the CallOptions field of the containing SecurityPoliciesClient
 	CallOptions **SecurityPoliciesCallOptions
+
+	logger *slog.Logger
 }
 
 // NewSecurityPoliciesRESTClient creates a new security policies rest client.
@@ -272,6 +304,7 @@ func NewSecurityPoliciesRESTClient(ctx context.Context, opts ...option.ClientOpt
 		endpoint:    endpoint,
 		httpClient:  httpClient,
 		CallOptions: &callOpts,
+		logger:      internaloption.GetLogger(opts),
 	}
 	c.setGoogleClientInfo()
 
@@ -291,9 +324,12 @@ func NewSecurityPoliciesRESTClient(ctx context.Context, opts ...option.ClientOpt
 func defaultSecurityPoliciesRESTClientOptions() []option.ClientOption {
 	return []option.ClientOption{
 		internaloption.WithDefaultEndpoint("https://compute.googleapis.com"),
+		internaloption.WithDefaultEndpointTemplate("https://compute.UNIVERSE_DOMAIN"),
 		internaloption.WithDefaultMTLSEndpoint("https://compute.mtls.googleapis.com"),
+		internaloption.WithDefaultUniverseDomain("googleapis.com"),
 		internaloption.WithDefaultAudience("https://compute.googleapis.com/"),
 		internaloption.WithDefaultScopes(DefaultAuthScopes()...),
+		internaloption.EnableNewAuthLibrary(),
 	}
 }
 
@@ -301,9 +337,11 @@ func defaultSecurityPoliciesRESTClientOptions() []option.ClientOption {
 // the `x-goog-api-client` header passed on each request. Intended for
 // use by Google-written clients.
 func (c *securityPoliciesRESTClient) setGoogleClientInfo(keyval ...string) {
-	kv := append([]string{"gl-go", versionGo()}, keyval...)
-	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN")
-	c.xGoogMetadata = metadata.Pairs("x-goog-api-client", gax.XGoogHeader(kv...))
+	kv := append([]string{"gl-go", gax.GoVersion}, keyval...)
+	kv = append(kv, "gapic", getVersionClient(), "gax", gax.Version, "rest", "UNKNOWN", "pb", protoVersion)
+	c.xGoogHeaders = []string{
+		"x-goog-api-client", gax.XGoogHeader(kv...),
+	}
 }
 
 // Close closes the connection to the API service. The user should invoke this when
@@ -347,9 +385,11 @@ func (c *securityPoliciesRESTClient) AddRule(ctx context.Context, req *computepb
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).AddRule[0:len((*c.CallOptions).AddRule):len((*c.CallOptions).AddRule)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -364,23 +404,13 @@ func (c *securityPoliciesRESTClient) AddRule(ctx context.Context, req *computepb
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "AddRule")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -398,7 +428,11 @@ func (c *securityPoliciesRESTClient) AddRule(ctx context.Context, req *computepb
 	return op, nil
 }
 
-// AggregatedList retrieves the list of all SecurityPolicy resources, regional and global, available to the specified project.
+// AggregatedList retrieves the list of all SecurityPolicy resources, regional and global,
+// available to the specified project.
+//
+// To prevent failure, Google recommends that you set the
+// returnPartialSuccess parameter to true.
 func (c *securityPoliciesRESTClient) AggregatedList(ctx context.Context, req *computepb.AggregatedListSecurityPoliciesRequest, opts ...gax.CallOption) *SecurityPoliciesScopedListPairIterator {
 	it := &SecurityPoliciesScopedListPairIterator{}
 	req = proto.Clone(req).(*computepb.AggregatedListSecurityPoliciesRequest)
@@ -409,7 +443,7 @@ func (c *securityPoliciesRESTClient) AggregatedList(ctx context.Context, req *co
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -438,11 +472,15 @@ func (c *securityPoliciesRESTClient) AggregatedList(ctx context.Context, req *co
 		if req != nil && req.ReturnPartialSuccess != nil {
 			params.Add("returnPartialSuccess", fmt.Sprintf("%v", req.GetReturnPartialSuccess()))
 		}
+		if req != nil && req.ServiceProjectNumber != nil {
+			params.Add("serviceProjectNumber", fmt.Sprintf("%v", req.GetServiceProjectNumber()))
+		}
 
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -453,23 +491,12 @@ func (c *securityPoliciesRESTClient) AggregatedList(ctx context.Context, req *co
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "AggregatedList")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -520,9 +547,11 @@ func (c *securityPoliciesRESTClient) Delete(ctx context.Context, req *computepb.
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Delete[0:len((*c.CallOptions).Delete):len((*c.CallOptions).Delete)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -537,23 +566,13 @@ func (c *securityPoliciesRESTClient) Delete(ctx context.Context, req *computepb.
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Delete")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -580,9 +599,11 @@ func (c *securityPoliciesRESTClient) Get(ctx context.Context, req *computepb.Get
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/global/securityPolicies/%v", req.GetProject(), req.GetSecurityPolicy())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Get[0:len((*c.CallOptions).Get):len((*c.CallOptions).Get)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.SecurityPolicy{}
@@ -597,23 +618,13 @@ func (c *securityPoliciesRESTClient) Get(ctx context.Context, req *computepb.Get
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "Get")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -640,9 +651,11 @@ func (c *securityPoliciesRESTClient) GetRule(ctx context.Context, req *computepb
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).GetRule[0:len((*c.CallOptions).GetRule):len((*c.CallOptions).GetRule)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.SecurityPolicyRule{}
@@ -657,23 +670,13 @@ func (c *securityPoliciesRESTClient) GetRule(ctx context.Context, req *computepb
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "GetRule")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -684,7 +687,8 @@ func (c *securityPoliciesRESTClient) GetRule(ctx context.Context, req *computepb
 	return resp, nil
 }
 
-// Insert creates a new policy in the specified project using the data included in the request.
+// Insert creates a new policy in the specified project using the data included in
+// the request.
 func (c *securityPoliciesRESTClient) Insert(ctx context.Context, req *computepb.InsertSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetSecurityPolicyResource()
@@ -710,9 +714,11 @@ func (c *securityPoliciesRESTClient) Insert(ctx context.Context, req *computepb.
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v", "project", url.QueryEscape(req.GetProject())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v", "project", url.QueryEscape(req.GetProject()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Insert[0:len((*c.CallOptions).Insert):len((*c.CallOptions).Insert)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -727,23 +733,13 @@ func (c *securityPoliciesRESTClient) Insert(ctx context.Context, req *computepb.
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Insert")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -772,7 +768,7 @@ func (c *securityPoliciesRESTClient) List(ctx context.Context, req *computepb.Li
 			req.PageToken = proto.String(pageToken)
 		}
 		if pageSize > math.MaxInt32 {
-			req.MaxResults = proto.Uint32(math.MaxInt32)
+			req.MaxResults = proto.Uint32(uint32(math.MaxInt32))
 		} else if pageSize != 0 {
 			req.MaxResults = proto.Uint32(uint32(pageSize))
 		}
@@ -802,7 +798,8 @@ func (c *securityPoliciesRESTClient) List(ctx context.Context, req *computepb.Li
 		baseUrl.RawQuery = params.Encode()
 
 		// Build HTTP headers from client and context metadata.
-		headers := buildHeaders(ctx, c.xGoogMetadata, metadata.Pairs("Content-Type", "application/json"))
+		hds := append(c.xGoogHeaders, "Content-Type", "application/json")
+		headers := gax.BuildHeaders(ctx, hds...)
 		e := gax.Invoke(ctx, func(ctx context.Context, settings gax.CallSettings) error {
 			if settings.Path != "" {
 				baseUrl.Path = settings.Path
@@ -813,23 +810,12 @@ func (c *securityPoliciesRESTClient) List(ctx context.Context, req *computepb.Li
 			}
 			httpReq.Header = headers
 
-			httpRsp, err := c.httpClient.Do(httpReq)
+			buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "List")
 			if err != nil {
 				return err
 			}
-			defer httpRsp.Body.Close()
-
-			if err = googleapi.CheckResponse(httpRsp); err != nil {
-				return err
-			}
-
-			buf, err := ioutil.ReadAll(httpRsp.Body)
-			if err != nil {
-				return err
-			}
-
 			if err := unm.Unmarshal(buf, resp); err != nil {
-				return maybeUnknownEnum(err)
+				return err
 			}
 
 			return nil
@@ -857,7 +843,8 @@ func (c *securityPoliciesRESTClient) List(ctx context.Context, req *computepb.Li
 	return it
 }
 
-// ListPreconfiguredExpressionSets gets the current list of preconfigured Web Application Firewall (WAF) expressions.
+// ListPreconfiguredExpressionSets gets the current list of preconfigured Web Application Firewall (WAF)
+// expressions.
 func (c *securityPoliciesRESTClient) ListPreconfiguredExpressionSets(ctx context.Context, req *computepb.ListPreconfiguredExpressionSetsSecurityPoliciesRequest, opts ...gax.CallOption) (*computepb.SecurityPoliciesListPreconfiguredExpressionSetsResponse, error) {
 	baseUrl, err := url.Parse(c.endpoint)
 	if err != nil {
@@ -885,9 +872,11 @@ func (c *securityPoliciesRESTClient) ListPreconfiguredExpressionSets(ctx context
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v", "project", url.QueryEscape(req.GetProject())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v", "project", url.QueryEscape(req.GetProject()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).ListPreconfiguredExpressionSets[0:len((*c.CallOptions).ListPreconfiguredExpressionSets):len((*c.CallOptions).ListPreconfiguredExpressionSets)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.SecurityPoliciesListPreconfiguredExpressionSetsResponse{}
@@ -902,23 +891,13 @@ func (c *securityPoliciesRESTClient) ListPreconfiguredExpressionSets(ctx context
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "ListPreconfiguredExpressionSets")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -929,7 +908,11 @@ func (c *securityPoliciesRESTClient) ListPreconfiguredExpressionSets(ctx context
 	return resp, nil
 }
 
-// Patch patches the specified policy with the data included in the request. To clear fields in the rule, leave the fields empty and specify them in the updateMask. This cannot be used to be update the rules in the policy. Please use the per rule methods like addRule, patchRule, and removeRule instead.
+// Patch patches the specified policy with the data included in the request. To
+// clear fields in the policy, leave the fields empty and specify them in the
+// updateMask. This cannot be used to be update the rules in the policy.
+// Please use the per rule methods like addRule, patchRule, and removeRule
+// instead.
 func (c *securityPoliciesRESTClient) Patch(ctx context.Context, req *computepb.PatchSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetSecurityPolicyResource()
@@ -948,13 +931,18 @@ func (c *securityPoliciesRESTClient) Patch(ctx context.Context, req *computepb.P
 	if req != nil && req.RequestId != nil {
 		params.Add("requestId", fmt.Sprintf("%v", req.GetRequestId()))
 	}
+	if req != nil && req.UpdateMask != nil {
+		params.Add("updateMask", fmt.Sprintf("%v", req.GetUpdateMask()))
+	}
 
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).Patch[0:len((*c.CallOptions).Patch):len((*c.CallOptions).Patch)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -969,23 +957,13 @@ func (c *securityPoliciesRESTClient) Patch(ctx context.Context, req *computepb.P
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "Patch")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1003,7 +981,8 @@ func (c *securityPoliciesRESTClient) Patch(ctx context.Context, req *computepb.P
 	return op, nil
 }
 
-// PatchRule patches a rule at the specified priority.
+// PatchRule patches a rule at the specified priority. To clear fields in the rule,
+// leave the fields empty and specify them in the updateMask.
 func (c *securityPoliciesRESTClient) PatchRule(ctx context.Context, req *computepb.PatchRuleSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetSecurityPolicyRuleResource()
@@ -1022,6 +1001,9 @@ func (c *securityPoliciesRESTClient) PatchRule(ctx context.Context, req *compute
 	if req != nil && req.Priority != nil {
 		params.Add("priority", fmt.Sprintf("%v", req.GetPriority()))
 	}
+	if req != nil && req.UpdateMask != nil {
+		params.Add("updateMask", fmt.Sprintf("%v", req.GetUpdateMask()))
+	}
 	if req != nil && req.ValidateOnly != nil {
 		params.Add("validateOnly", fmt.Sprintf("%v", req.GetValidateOnly()))
 	}
@@ -1029,9 +1011,11 @@ func (c *securityPoliciesRESTClient) PatchRule(ctx context.Context, req *compute
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).PatchRule[0:len((*c.CallOptions).PatchRule):len((*c.CallOptions).PatchRule)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1046,23 +1030,13 @@ func (c *securityPoliciesRESTClient) PatchRule(ctx context.Context, req *compute
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "PatchRule")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1096,9 +1070,11 @@ func (c *securityPoliciesRESTClient) RemoveRule(ctx context.Context, req *comput
 	baseUrl.RawQuery = params.Encode()
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "security_policy", url.QueryEscape(req.GetSecurityPolicy()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).RemoveRule[0:len((*c.CallOptions).RemoveRule):len((*c.CallOptions).RemoveRule)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1113,23 +1089,13 @@ func (c *securityPoliciesRESTClient) RemoveRule(ctx context.Context, req *comput
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, nil, "RemoveRule")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1147,7 +1113,9 @@ func (c *securityPoliciesRESTClient) RemoveRule(ctx context.Context, req *comput
 	return op, nil
 }
 
-// SetLabels sets the labels on a security policy. To learn more about labels, read the Labeling Resources documentation.
+// SetLabels sets the labels on a security policy. To learn more about labels,
+// read the Labeling Resources
+// documentation.
 func (c *securityPoliciesRESTClient) SetLabels(ctx context.Context, req *computepb.SetLabelsSecurityPolicyRequest, opts ...gax.CallOption) (*Operation, error) {
 	m := protojson.MarshalOptions{AllowPartial: true}
 	body := req.GetGlobalSetLabelsRequestResource()
@@ -1163,9 +1131,11 @@ func (c *securityPoliciesRESTClient) SetLabels(ctx context.Context, req *compute
 	baseUrl.Path += fmt.Sprintf("/compute/v1/projects/%v/global/securityPolicies/%v/setLabels", req.GetProject(), req.GetResource())
 
 	// Build HTTP headers from client and context metadata.
-	md := metadata.Pairs("x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "resource", url.QueryEscape(req.GetResource())))
+	hds := []string{"x-goog-request-params", fmt.Sprintf("%s=%v&%s=%v", "project", url.QueryEscape(req.GetProject()), "resource", url.QueryEscape(req.GetResource()))}
 
-	headers := buildHeaders(ctx, c.xGoogMetadata, md, metadata.Pairs("Content-Type", "application/json"))
+	hds = append(c.xGoogHeaders, hds...)
+	hds = append(hds, "Content-Type", "application/json")
+	headers := gax.BuildHeaders(ctx, hds...)
 	opts = append((*c.CallOptions).SetLabels[0:len((*c.CallOptions).SetLabels):len((*c.CallOptions).SetLabels)], opts...)
 	unm := protojson.UnmarshalOptions{AllowPartial: true, DiscardUnknown: true}
 	resp := &computepb.Operation{}
@@ -1180,23 +1150,13 @@ func (c *securityPoliciesRESTClient) SetLabels(ctx context.Context, req *compute
 		httpReq = httpReq.WithContext(ctx)
 		httpReq.Header = headers
 
-		httpRsp, err := c.httpClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRsp.Body.Close()
-
-		if err = googleapi.CheckResponse(httpRsp); err != nil {
-			return err
-		}
-
-		buf, err := ioutil.ReadAll(httpRsp.Body)
+		buf, err := executeHTTPRequest(ctx, c.httpClient, httpReq, c.logger, jsonReq, "SetLabels")
 		if err != nil {
 			return err
 		}
 
 		if err := unm.Unmarshal(buf, resp); err != nil {
-			return maybeUnknownEnum(err)
+			return err
 		}
 
 		return nil
@@ -1212,57 +1172,4 @@ func (c *securityPoliciesRESTClient) SetLabels(ctx context.Context, req *compute
 		},
 	}
 	return op, nil
-}
-
-// SecurityPoliciesScopedListPair is a holder type for string/*computepb.SecurityPoliciesScopedList map entries
-type SecurityPoliciesScopedListPair struct {
-	Key   string
-	Value *computepb.SecurityPoliciesScopedList
-}
-
-// SecurityPoliciesScopedListPairIterator manages a stream of SecurityPoliciesScopedListPair.
-type SecurityPoliciesScopedListPairIterator struct {
-	items    []SecurityPoliciesScopedListPair
-	pageInfo *iterator.PageInfo
-	nextFunc func() error
-
-	// Response is the raw response for the current page.
-	// It must be cast to the RPC response type.
-	// Calling Next() or InternalFetch() updates this value.
-	Response interface{}
-
-	// InternalFetch is for use by the Google Cloud Libraries only.
-	// It is not part of the stable interface of this package.
-	//
-	// InternalFetch returns results from a single call to the underlying RPC.
-	// The number of results is no greater than pageSize.
-	// If there are no more results, nextPageToken is empty and err is nil.
-	InternalFetch func(pageSize int, pageToken string) (results []SecurityPoliciesScopedListPair, nextPageToken string, err error)
-}
-
-// PageInfo supports pagination. See the google.golang.org/api/iterator package for details.
-func (it *SecurityPoliciesScopedListPairIterator) PageInfo() *iterator.PageInfo {
-	return it.pageInfo
-}
-
-// Next returns the next result. Its second return value is iterator.Done if there are no more
-// results. Once Next returns Done, all subsequent calls will return Done.
-func (it *SecurityPoliciesScopedListPairIterator) Next() (SecurityPoliciesScopedListPair, error) {
-	var item SecurityPoliciesScopedListPair
-	if err := it.nextFunc(); err != nil {
-		return item, err
-	}
-	item = it.items[0]
-	it.items = it.items[1:]
-	return item, nil
-}
-
-func (it *SecurityPoliciesScopedListPairIterator) bufLen() int {
-	return len(it.items)
-}
-
-func (it *SecurityPoliciesScopedListPairIterator) takeBuf() interface{} {
-	b := it.items
-	it.items = nil
-	return b
 }
