@@ -174,9 +174,15 @@ agent:
         arch: arm64
         path: https://github.com/loft-sh/devpod-provider-gcloud/releases/download/##VERSION##/devpod-provider-gcloud-linux-arm64
         checksum: ##CHECKSUM_LINUX_ARM64##
+  # Powers the VM off from inside, which GCE treats as a stop, instead of calling
+  # the API with GCLOUD_PROVIDER_TOKEN: that token is minted on the client with
+  # no refresh token, so it has expired long before any inactivity timeout ends.
+  # Only VMs whose creator set the devpod-auto-stop=true metadata attribute stop.
   exec:
     shutdown: |-
-      ${GCLOUD_PROVIDER} stop --raw
+      if [ "$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/devpod-auto-stop)" = "true" ]; then
+        shutdown -h now
+      fi
 binaries:
   GCLOUD_PROVIDER:
     - os: linux
