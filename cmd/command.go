@@ -3,11 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
-	"strconv"
-	"time"
+	"strings"
+	"sync"
 
 	"github.com/loft-sh/devpod-provider-gcloud/pkg/gcloud"
 	"github.com/loft-sh/devpod-provider-gcloud/pkg/options"
@@ -72,75 +71,74 @@ func (cmd *CommandCmd) Run(ctx context.Context, options *options.Options, log lo
 		return fmt.Errorf("instance %s doesn't have an external nat ip", options.MachineID)
 	}
 
-	var target string
-	var port string
-	// get external address
 	if options.PublicIP {
-		target = *instance.NetworkInterfaces[0].AccessConfigs[0].NatIP
-		port = "22"
-	} else {
-		target = "localhost"
-
-		port, err = findAvailablePort()
+		sshClient, err := ssh.NewSSHClient("devpod", *instance.NetworkInterfaces[0].AccessConfigs[0].NatIP+":22", privateKey)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create ssh client")
 		}
+		defer sshClient.Close()
 
-		gcloudIAPcommand := exec.Command("gcloud", []string{
-			"compute",
-			"start-iap-tunnel",
-			*instance.Name,
-			"22",
-			"--local-host-port=localhost:" + port,
-			"--zone=" + options.Zone,
-		}...)
-
-		// open tunnel in background
-		if err = gcloudIAPcommand.Start(); err != nil {
-			return fmt.Errorf("start tunnel: %w", err)
-		}
-		defer func() {
-			err = gcloudIAPcommand.Process.Kill()
-		}()
-
-		timeoutCtx, cancelFn := context.WithTimeout(ctx, 30*time.Second)
-		defer cancelFn()
-		waitForPort(timeoutCtx, port)
+		return ssh.Run(ctx, sshClient, command, os.Stdin, os.Stdout, os.Stderr)
 	}
 
-	sshClient, err := ssh.NewSSHClient("devpod", target+":"+port, privateKey)
+	// The tunnel carries SSH over its own stdin/stdout rather than a local port, so it exits when that
+	// pipe closes. devpod kills this process without letting deferred cleanup run, and a tunnel bound
+	// to a local port would outlive it.
+	tunnel := exec.Command("gcloud", []string{
+		"compute",
+		"start-iap-tunnel",
+		*instance.Name,
+		"22",
+		"--listen-on-stdin",
+		"--zone=" + options.Zone,
+	}...)
+	tunnelStderr := &tailBuffer{max: 4096}
+	tunnel.Stderr = tunnelStderr
+	tunnelIn, err := tunnel.StdinPipe()
 	if err != nil {
-		return errors.Wrap(err, "create ssh client")
+		return fmt.Errorf("start tunnel: %w", err)
+	}
+	tunnelOut, err := tunnel.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("start tunnel: %w", err)
+	}
+	if err = tunnel.Start(); err != nil {
+		return fmt.Errorf("start tunnel: %w", err)
+	}
+	defer func() {
+		_ = tunnelIn.Close()
+		_ = tunnel.Process.Kill()
+		_ = tunnel.Wait()
+	}()
+
+	sshClient, err := ssh.StdioClientFromKeyBytesWithUser(privateKey, tunnelOut, tunnelIn, "devpod", false)
+	if err != nil {
+		return errors.Wrapf(err, "create ssh client over iap tunnel: %s", tunnelStderr.String())
 	}
 	defer sshClient.Close()
 
-	// run command
 	return ssh.Run(ctx, sshClient, command, os.Stdin, os.Stdout, os.Stderr)
 }
 
-func findAvailablePort() (string, error) {
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return "", err
-	}
-	defer l.Close()
-
-	return strconv.Itoa(l.Addr().(*net.TCPAddr).Port), nil
+// tailBuffer keeps the last max bytes written to it, so a long session cannot grow it without bound.
+type tailBuffer struct {
+	mu  sync.Mutex
+	max int
+	buf []byte
 }
 
-func waitForPort(ctx context.Context, port string) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			l, err := net.Listen("tcp", "localhost:"+port)
-			if err != nil {
-				// port is taken
-				return
-			}
-			_ = l.Close()
-			time.Sleep(1 * time.Second)
-		}
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf = append(b.buf, p...)
+	if len(b.buf) > b.max {
+		b.buf = b.buf[len(b.buf)-b.max:]
 	}
+	return len(p), nil
+}
+
+func (b *tailBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return strings.TrimSpace(string(b.buf))
 }
